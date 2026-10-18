@@ -27,6 +27,23 @@ OPENAI_API_KEY=your_api_key
 AI coloring-page generation is restricted to local development until
 authentication is added. Each batch is limited to 10 generated pages.
 
+## Authentication and database setup
+
+Copy `.env.example` to `.env` and configure `DATABASE_URL`. Google sign-in
+requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; magic-link sign-in
+requires an SMTP `EMAIL_SERVER` and `EMAIL_FROM`. Set `NEXTAUTH_SECRET` to a
+long random value and `NEXTAUTH_URL` to the app's URL.
+
+Generate Prisma Client and create the database tables with:
+
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+The dashboard supports user-owned collections and books, with book dimensions
+using the editor's letter, paperback, and square presets.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

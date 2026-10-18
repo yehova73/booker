@@ -56,10 +56,16 @@ export function useAuthModal() {
     };
   }, []);
 
-  const openDialog = (mode: "signin" | "signup", cbUrl?: string) =>
-    dispatch({ type: actionTypes.SHOW_DIALOG, mode, cbUrl });
+  const openDialog = React.useCallback(
+    (mode: "signin" | "signup", cbUrl?: string) =>
+      dispatch({ type: actionTypes.SHOW_DIALOG, mode, cbUrl }),
+    [],
+  );
 
-  const closeDialog = () => dispatch({ type: actionTypes.CLOSE_DIALOG });
+  const closeDialog = React.useCallback(
+    () => dispatch({ type: actionTypes.CLOSE_DIALOG }),
+    [],
+  );
 
   return { ...state, openDialog, closeDialog };
 }

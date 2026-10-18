@@ -117,7 +117,7 @@ export async function createUserAction(data: {
       status: "ok",
       data: {
         id: claimedUser.id,
-        email: claimedUser.email,
+          email: claimedUser.email ?? email,
         name: claimedUser.name || "",
         password: claimedUser.password || "",
       },
@@ -155,7 +155,7 @@ export async function createUserAction(data: {
     status: "ok",
     data: {
       id: user.id,
-      email: user.email,
+      email: user.email ?? email,
       name: user.name || "",
       password: user.password || "",
     },

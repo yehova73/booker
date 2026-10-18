@@ -30,15 +30,15 @@ export function AuthModal() {
   } = useAuthModal();
   const params = useSearchParams();
   const actionParam = params.get("action");
-  const callbackUrl = cbUrl || "/app";
+  const callbackUrl = cbUrl || "/dashboard";
   const [mode, setMode] = useState<Mode>(initialMode || "signin");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (actionParam === "login") {
-      openDialog("signin");
+      openDialog("signin", "/dashboard");
     }
-  }, [actionParam]);
+  }, [actionParam, openDialog]);
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | undefined;

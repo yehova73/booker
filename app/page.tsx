@@ -1,6 +1,14 @@
+"use client";
+
+import { Suspense } from "react";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { AuthModal } from "@/components/modals/auth-modal/auth-modal";
+import { useAuthModal } from "@/components/modals/auth-modal/use-auth-modal";
 
 export default function Home() {
+  const { openDialog } = useAuthModal();
+
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
@@ -39,6 +47,13 @@ export default function Home() {
           </p>
         </div>
         <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+          <Button
+            type="button"
+            className="h-12 rounded-full px-5 md:w-[158px]"
+            onClick={() => openDialog("signin", "/dashboard")}
+          >
+            Sign in
+          </Button>
           <a
             className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
             href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
@@ -64,6 +79,9 @@ export default function Home() {
           </a>
         </div>
       </main>
+      <Suspense fallback={null}>
+        <AuthModal />
+      </Suspense>
     </div>
   );
 }
