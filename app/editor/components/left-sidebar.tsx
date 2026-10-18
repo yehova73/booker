@@ -37,9 +37,11 @@ import type {
   ShapeType,
   SudokuDifficulty,
   TextStyle,
+  WordSearchGenerationSettings,
 } from "./editor-types";
 import { ART_LIBRARY, SHAPE_LIBRARY } from "@/lib/designAssets";
 import { SudokuGeneratorDialog } from "./sudoku-generator-dialog";
+import { WordSearchGeneratorDialog } from "./word-search-generator-dialog";
 
 const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Paragraph", style: "paragraph" },
@@ -86,6 +88,7 @@ export function LeftSidebar({
   onInsertArtwork,
   onInsertImage,
   onGenerateSudoku,
+  onGenerateWordSearch,
 }: {
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
@@ -96,9 +99,13 @@ export function LeftSidebar({
     difficulty: SudokuDifficulty,
     pageCount: number,
   ) => Promise<void>;
+  onGenerateWordSearch: (
+    settings: WordSearchGenerationSettings,
+  ) => Promise<void>;
 }) {
   const { open } = useSidebar("left");
   const [sudokuDialogOpen, setSudokuDialogOpen] = useState(false);
+  const [wordSearchDialogOpen, setWordSearchDialogOpen] = useState(false);
   return (
     <Sidebar
       aria-label="Book content"
@@ -158,7 +165,10 @@ export function LeftSidebar({
                             title !== "Text" &&
                             title !== "Shapes" &&
                             title !== "Artwork" &&
-                            !(title === "Puzzles" && item === "Sudoku")
+                            !(
+                              title === "Puzzles" &&
+                              (item === "Sudoku" || item === "Word search")
+                            )
                           }
                           key={item}
                           onClick={() => {
@@ -182,6 +192,11 @@ export function LeftSidebar({
                               item === "Sudoku"
                             ) {
                               setSudokuDialogOpen(true);
+                            } else if (
+                              title === "Puzzles" &&
+                              item === "Word search"
+                            ) {
+                              setWordSearchDialogOpen(true);
                             }
                           }}
                         >
@@ -219,6 +234,11 @@ export function LeftSidebar({
         open={sudokuDialogOpen}
         onOpenChange={setSudokuDialogOpen}
         onGenerate={onGenerateSudoku}
+      />
+      <WordSearchGeneratorDialog
+        open={wordSearchDialogOpen}
+        onOpenChange={setWordSearchDialogOpen}
+        onGenerate={onGenerateWordSearch}
       />
     </Sidebar>
   );

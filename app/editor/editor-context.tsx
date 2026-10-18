@@ -30,6 +30,12 @@ import type {
   TextElementUpdates,
   TextStyle,
   TrimPreset,
+  WordSearchEditorElement,
+  WordSearchGenerationSettings,
+  WordSearchGridElementUpdates,
+  WordSearchPlacement,
+  WordSearchWordsElementUpdates,
+  WordSearchWordsEditorElement,
   ZoomLevel,
 } from "./components/editor-types";
 import { ART_LIBRARY, SHAPE_TYPES } from "@/lib/designAssets";
@@ -38,6 +44,7 @@ import {
   isSudokuDifficulty,
   updateSudokuDifficulty,
 } from "./sudoku-utils";
+import { generateWordSearches } from "./word-search-utils";
 
 const storageKey = "booker-editor-document";
 const defaultImageFilters: ImageFilterSettings = {
@@ -171,7 +178,10 @@ type EditorContextValue = EditorDocument & {
     difficulty: SudokuDifficulty,
     pageCount: number,
   ) => Promise<void>;
-  generateSudokuSolutions: () => void;
+  addWordSearchPages: (
+    settings: WordSearchGenerationSettings,
+  ) => Promise<void>;
+  generatePuzzleSolutions: () => void;
   deleteElement: (elementId: string) => void;
   updateTextContent: (elementId: string, content: string) => void;
   updateTextElement: (elementId: string, updates: TextElementUpdates) => void;
@@ -187,6 +197,14 @@ type EditorContextValue = EditorDocument & {
   updateSudokuElement: (
     elementId: string,
     updates: SudokuElementUpdates,
+  ) => void;
+  updateWordSearchGridElement: (
+    elementId: string,
+    updates: WordSearchGridElementUpdates,
+  ) => void;
+  updateWordSearchWordsElement: (
+    elementId: string,
+    updates: WordSearchWordsElementUpdates,
   ) => void;
   setSudokuDifficulty: (
     elementId: string,
@@ -496,18 +514,98 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         });
         selectElement(null);
       },
-      generateSudokuSolutions: () => {
+      addWordSearchPages: async (settings) => {
+        const { cols, rows, dictionary, maxWords, pageCount, dictionaryName } =
+          settings;
+        if (
+          !Number.isInteger(pageCount) ||
+          pageCount < 1 ||
+          pageCount > 50
+        ) {
+          throw new Error("Word Search page count must be between 1 and 50.");
+        }
+
+        const generated = await generateWordSearches({
+          cols,
+          rows,
+          dictionary,
+          maxWords,
+          pageCount,
+        });
+        const latestDocument = parseDocument(
+          JSON.parse(getSnapshot()) as StorageSnapshot,
+        ).document;
+        const pages = generated.map((data, index) => {
+          const element: WordSearchEditorElement = {
+            id: crypto.randomUUID(),
+            kind: "word-search",
+            puzzleId: crypto.randomUUID(),
+            rows,
+            cols,
+            grid: data.grid,
+            words: data.words,
+            dictionaryName,
+            color: "#2b4736",
+            letterSize: Math.max(5, Math.min(18, 180 / Math.max(rows, cols))),
+            lineWeight: 1.5,
+            isSolution: false,
+            x: 12,
+            y: 12,
+            width: 76,
+            height: 72,
+            zIndex: 0,
+          };
+          const wordList: WordSearchWordsEditorElement = {
+            id: crypto.randomUUID(),
+            kind: "word-search-words",
+            puzzleId: element.puzzleId,
+            words: data.words,
+            color: element.color,
+            fontFamily: "sans",
+            fontSize: 12,
+            spacing: 0,
+            lineSpacing: 4,
+            isSolution: false,
+            x: 12,
+            y: 84,
+            width: 76,
+            height: 11,
+            zIndex: 1,
+          };
+          return {
+            id: crypto.randomUUID(),
+            title: `Word Search ${index + 1}`,
+            elements: [element, wordList],
+          };
+        });
+        saveDocument({
+          ...latestDocument,
+          pages: [...latestDocument.pages, ...pages],
+          currentPageId: pages[0].id,
+        });
+        selectElement(null);
+      },
+      generatePuzzleSolutions: () => {
         const puzzles = document.pages.flatMap((page) =>
-          page.pageType === "sudoku-solutions"
+          page.pageType === "sudoku-solutions" ||
+          page.pageType === "puzzle-solutions"
             ? []
             : page.elements.filter(
-                (element): element is SudokuEditorElement =>
-                  element.kind === "sudoku" && !element.isSolution,
+                (
+                  element,
+                ): element is SudokuEditorElement | WordSearchEditorElement =>
+                  (element.kind === "sudoku" ||
+                    element.kind === "word-search") &&
+                  !element.isSolution,
               ),
         );
         if (puzzles.length === 0) return;
 
-        const solutionElements = puzzles.map((element, index) => ({
+        const sudokuPuzzles = puzzles.filter(
+          (element): element is SudokuEditorElement =>
+            element.kind === "sudoku",
+        );
+        const sudokuSolutions = sudokuPuzzles.map((element, index) => ({
           ...element,
           id: crypto.randomUUID(),
           puzzle: [...element.solution],
@@ -520,18 +618,75 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           height: 40,
           zIndex: 0,
         }));
-        const solutionPages = Array.from(
-          { length: Math.ceil(solutionElements.length / 4) },
+        const sudokuSolutionPages = Array.from(
+          { length: Math.ceil(sudokuSolutions.length / 4) },
           (_, pageIndex) => ({
             id: crypto.randomUUID(),
             title: `Sudoku solutions ${pageIndex + 1}`,
-            pageType: "sudoku-solutions" as const,
-            elements: solutionElements.slice(pageIndex * 4, pageIndex * 4 + 4),
+            pageType: "puzzle-solutions" as const,
+            elements: sudokuSolutions.slice(pageIndex * 4, pageIndex * 4 + 4),
           }),
         );
+        const wordSearchPuzzles = puzzles.filter(
+          (element): element is WordSearchEditorElement =>
+            element.kind === "word-search",
+        );
+        const wordSearchSolutionPages = wordSearchPuzzles.map(
+          (element, index) => {
+            const solutionPuzzleId = crypto.randomUUID();
+            const sourceWordList = document.pages
+              .flatMap((page) => page.elements)
+              .find(
+                (candidate): candidate is WordSearchWordsEditorElement =>
+                  candidate.kind === "word-search-words" &&
+                  candidate.puzzleId === element.puzzleId,
+              );
+            const solutionGrid: WordSearchEditorElement = {
+              ...element,
+              id: crypto.randomUUID(),
+              puzzleId: solutionPuzzleId,
+              isSolution: true,
+              solutionNumber: index + 1,
+              x: 12,
+              y: 8,
+              width: 76,
+              height: 68,
+              zIndex: 0,
+            };
+            const solutionWords: WordSearchWordsEditorElement = {
+              id: crypto.randomUUID(),
+              kind: "word-search-words",
+              puzzleId: solutionPuzzleId,
+              words: element.words,
+              color: element.color,
+              fontFamily: sourceWordList?.fontFamily ?? "sans",
+              fontSize: sourceWordList?.fontSize ?? 12,
+              spacing: sourceWordList?.spacing ?? 0,
+              lineSpacing: sourceWordList?.lineSpacing ?? 4,
+              isSolution: true,
+              x: 12,
+              y: 78,
+              width: 76,
+              height: 16,
+              zIndex: 1,
+            };
+            return {
+              id: crypto.randomUUID(),
+              title: `Word Search solution ${index + 1}`,
+              pageType: "puzzle-solutions" as const,
+              elements: [solutionGrid, solutionWords],
+            };
+          },
+        );
+        const solutionPages = [
+          ...sudokuSolutionPages,
+          ...wordSearchSolutionPages,
+        ];
         const pages = [
           ...document.pages.filter(
-            (page) => page.pageType !== "sudoku-solutions",
+            (page) =>
+              page.pageType !== "sudoku-solutions" &&
+              page.pageType !== "puzzle-solutions",
           ),
           ...solutionPages,
         ];
@@ -669,6 +824,70 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                     ? updated.color
                     : "#2b4736",
                   numberSize: clamp(updated.numberSize, 4, 48),
+                };
+              }),
+          ),
+        });
+      },
+      updateWordSearchGridElement: (elementId, updates) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) => {
+                if (element.id !== elementId || element.kind !== "word-search")
+                  return element;
+                return {
+                  ...element,
+                  letterSize: clamp(
+                    updates.letterSize ?? element.letterSize,
+                    4,
+                    48,
+                  ),
+                  lineWeight: clamp(
+                    updates.lineWeight ?? element.lineWeight,
+                    0.5,
+                    8,
+                  ),
+                };
+              }),
+          ),
+        });
+      },
+      updateWordSearchWordsElement: (elementId, updates) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) => {
+                if (
+                  element.id !== elementId ||
+                  element.kind !== "word-search-words"
+                ) {
+                  return element;
+                }
+                return {
+                  ...element,
+                  ...updates,
+                  fontSize: clamp(
+                    updates.fontSize ?? element.fontSize,
+                    4,
+                    72,
+                  ),
+                  spacing: clamp(
+                    updates.spacing ?? element.spacing,
+                    -2,
+                    12,
+                  ),
+                  lineSpacing: clamp(
+                    updates.lineSpacing ?? element.lineSpacing,
+                    0,
+                    24,
+                  ),
                 };
               }),
           ),
@@ -934,13 +1153,49 @@ function normalizeDocument(value: unknown): EditorDocument | null {
       if (!element) return null;
       elements.push(element);
     }
+    const wordSearchGrids = elements.filter(
+      (element): element is WordSearchEditorElement =>
+        element.kind === "word-search",
+    );
+    for (const grid of wordSearchGrids) {
+      if (
+        elements.some(
+          (element) =>
+            element.kind === "word-search-words" &&
+            element.puzzleId === grid.puzzleId,
+        )
+      ) {
+        continue;
+      }
+      elements.push({
+        id: crypto.randomUUID(),
+        kind: "word-search-words",
+        puzzleId: grid.puzzleId,
+        words: grid.words,
+        color: grid.color,
+        fontFamily: "sans",
+        fontSize: 12,
+        spacing: 0,
+        lineSpacing: 4,
+        isSolution: grid.isSolution,
+        ...(grid.solutionNumber
+          ? { solutionNumber: grid.solutionNumber }
+          : {}),
+        x: grid.x,
+        y: Math.min(88, grid.y + grid.height + 2),
+        width: grid.width,
+        height: Math.max(8, Math.min(16, grid.height * 0.2)),
+        zIndex: grid.zIndex + 1,
+      });
+    }
     pages.push({
       id: pageValue.id,
       title:
         typeof pageValue.title === "string"
           ? pageValue.title
           : `Page ${pageIndex + 1}`,
-      ...(pageValue.pageType === "sudoku-solutions"
+      ...(pageValue.pageType === "sudoku-solutions" ||
+      pageValue.pageType === "puzzle-solutions"
         ? { pageType: pageValue.pageType }
         : {}),
       elements,
@@ -1104,6 +1359,82 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
         : {}),
     };
   }
+  if (value.kind === "word-search") {
+    const rows = value.rows;
+    const cols = value.cols;
+    const solutionNumber = value.solutionNumber;
+    if (
+      !isGridDimension(rows) ||
+      !isGridDimension(cols) ||
+      !isWordSearchGrid(value.grid, rows, cols) ||
+      !isWordSearchPlacements(value.words, rows, cols) ||
+      typeof value.dictionaryName !== "string" ||
+      !value.dictionaryName.trim()
+    ) {
+      return null;
+    }
+    return {
+      ...position,
+      kind: "word-search",
+      puzzleId:
+        typeof value.puzzleId === "string" && value.puzzleId.length > 0
+          ? value.puzzleId
+          : `word-search-${value.id}`,
+      rows,
+      cols,
+      grid: value.grid,
+      words: value.words,
+      dictionaryName: value.dictionaryName,
+      color: isHexColor(value.color) ? value.color : "#2b4736",
+      letterSize: isFiniteNumber(value.letterSize)
+        ? clamp(value.letterSize, 4, 48)
+        : Math.max(5, Math.min(18, 180 / Math.max(rows, cols))),
+      lineWeight: isFiniteNumber(value.lineWeight)
+        ? clamp(value.lineWeight, 0.5, 8)
+        : 1.5,
+      isSolution: value.isSolution === true,
+      ...(typeof solutionNumber === "number" &&
+      Number.isInteger(solutionNumber) &&
+      solutionNumber > 0
+        ? { solutionNumber }
+        : {}),
+    };
+  }
+  if (value.kind === "word-search-words") {
+    const solutionNumber = value.solutionNumber;
+    if (
+      typeof value.puzzleId !== "string" ||
+      !value.puzzleId ||
+      !isWordSearchPlacements(value.words, 30, 30)
+    ) {
+      return null;
+    }
+    return {
+      ...position,
+      kind: "word-search-words",
+      puzzleId: value.puzzleId,
+      words: value.words,
+      color: isHexColor(value.color) ? value.color : "#2b4736",
+      fontFamily: isTextFontFamily(value.fontFamily)
+        ? value.fontFamily
+        : "sans",
+      fontSize: isFiniteNumber(value.fontSize)
+        ? clamp(value.fontSize, 4, 72)
+        : 12,
+      spacing: isFiniteNumber(value.spacing)
+        ? clamp(value.spacing, -2, 12)
+        : 0,
+      lineSpacing: isFiniteNumber(value.lineSpacing)
+        ? clamp(value.lineSpacing, 0, 24)
+        : 4,
+      isSolution: value.isSolution === true,
+      ...(typeof solutionNumber === "number" &&
+      Number.isInteger(solutionNumber) &&
+      solutionNumber > 0
+        ? { solutionNumber }
+        : {}),
+    };
+  }
   if (value.kind === "artwork" && isArtKey(value.artKey)) {
     return {
       ...position,
@@ -1220,10 +1551,73 @@ function isEditorPage(value: unknown): value is EditorPage {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.title === "string" &&
-    (value.pageType === undefined || value.pageType === "sudoku-solutions") &&
+    (value.pageType === undefined ||
+      value.pageType === "sudoku-solutions" ||
+      value.pageType === "puzzle-solutions") &&
     Array.isArray(value.elements) &&
     value.elements.every(isEditorElement)
   );
+}
+
+function isGridDimension(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 5 &&
+    value <= 30
+  );
+}
+
+function isWordSearchGrid(
+  value: unknown,
+  rows: number,
+  cols: number,
+): value is string[][] {
+  return (
+    Array.isArray(value) &&
+    value.length === rows &&
+    value.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === cols &&
+        row.every((cell) => typeof cell === "string" && cell.length === 1),
+    )
+  );
+}
+
+function isWordSearchPlacements(
+  value: unknown,
+  rows: number,
+  cols: number,
+): value is WordSearchPlacement[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (placement) =>
+        isRecord(placement) &&
+        typeof placement.word === "string" &&
+        placement.word.length > 0 &&
+        typeof placement.clean === "string" &&
+        placement.clean.length > 0 &&
+        Array.isArray(placement.path) &&
+        placement.path.length === placement.clean.length &&
+        placement.path.every(
+          (point) =>
+            isRecord(point) &&
+            isInteger(point.x) &&
+            isInteger(point.y) &&
+            point.x >= 0 &&
+            point.x < cols &&
+            point.y >= 0 &&
+            point.y < rows,
+        ),
+    )
+  );
+}
+
+function isInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
 }
 
 function isEditorElement(value: unknown): value is EditorElement {
@@ -1293,6 +1687,45 @@ function isEditorElement(value: unknown): value is EditorElement {
       isFiniteNumber(value.hiddenSquares) &&
       isHexColor(value.color) &&
       isFiniteNumber(value.numberSize) &&
+      typeof value.isSolution === "boolean" &&
+      (solutionNumber === undefined ||
+        (typeof solutionNumber === "number" &&
+          Number.isInteger(solutionNumber) &&
+          solutionNumber > 0))
+    );
+  }
+  if (value.kind === "word-search") {
+    const solutionNumber = value.solutionNumber;
+    return (
+      isGridDimension(value.rows) &&
+      isGridDimension(value.cols) &&
+      isWordSearchGrid(value.grid, value.rows, value.cols) &&
+      isWordSearchPlacements(value.words, value.rows, value.cols) &&
+      typeof value.dictionaryName === "string" &&
+      value.dictionaryName.trim().length > 0 &&
+      isHexColor(value.color) &&
+      isFiniteNumber(value.letterSize) &&
+      isFiniteNumber(value.lineWeight) &&
+      typeof value.puzzleId === "string" &&
+      value.puzzleId.length > 0 &&
+      typeof value.isSolution === "boolean" &&
+      (solutionNumber === undefined ||
+        (typeof solutionNumber === "number" &&
+          Number.isInteger(solutionNumber) &&
+          solutionNumber > 0))
+    );
+  }
+  if (value.kind === "word-search-words") {
+    const solutionNumber = value.solutionNumber;
+    return (
+      typeof value.puzzleId === "string" &&
+      value.puzzleId.length > 0 &&
+      isWordSearchPlacements(value.words, 30, 30) &&
+      isHexColor(value.color) &&
+      isTextFontFamily(value.fontFamily) &&
+      isFiniteNumber(value.fontSize) &&
+      isFiniteNumber(value.spacing) &&
+      isFiniteNumber(value.lineSpacing) &&
       typeof value.isSolution === "boolean" &&
       (solutionNumber === undefined ||
         (typeof solutionNumber === "number" &&

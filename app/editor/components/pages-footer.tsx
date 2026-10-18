@@ -26,9 +26,11 @@ export function PagesFooter({
   onDeletePage,
   onGenerateSolutions,
 }: PagesFooterProps) {
-  const hasSudoku = pages.some((page) =>
+  const hasPuzzles = pages.some((page) =>
     page.elements.some(
-      (element) => element.kind === "sudoku" && !element.isSolution,
+      (element) =>
+        (element.kind === "sudoku" || element.kind === "word-search") &&
+        !element.isSolution,
     ),
   );
 
@@ -52,7 +54,7 @@ export function PagesFooter({
 
       <ScrollArea className="h-full w-full overflow-y-hidden">
         <div className="flex w-max min-w-full items-start overflow-y-hidden gap-3 pb-2 py-2">
-          {hasSudoku && (
+          {hasPuzzles && (
             <button
               aria-label="Generate solutions"
               className="flex h-[84px] w-[78px] cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-[#e2e7e2] transition hover:border-[#6b9076]"

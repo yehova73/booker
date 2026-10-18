@@ -52,8 +52,11 @@ export function PageThumbnail({
                       ? "absolute block overflow-hidden"
                       : element.kind === "artwork"
                         ? "absolute block"
-                            : element.kind === "sudoku"
+                            : element.kind === "sudoku" ||
+                                element.kind === "word-search"
                               ? "absolute grid overflow-hidden"
+                              : element.kind === "word-search-words"
+                                ? "absolute flex flex-wrap content-center justify-center gap-px overflow-hidden text-center leading-none"
                             : "absolute block rounded-[1px] bg-[#dce6d8]"
               }
               key={element.id}
@@ -65,13 +68,29 @@ export function PageThumbnail({
                   element.kind === "text"
                     ? "5px"
                     : `${Math.max(4, element.height)}%`,
-                fontSize: "3px",
+                fontSize:
+                  element.kind === "word-search"
+                    ? `${Math.min(3, element.letterSize / 6)}px`
+                    : element.kind === "word-search-words"
+                      ? `${Math.max(1, element.fontSize / 6)}px`
+                      : "3px",
+                ...(element.kind === "word-search-words"
+                  ? {
+                      letterSpacing: `${element.spacing / 6}px`,
+                      rowGap: `${element.lineSpacing / 6}px`,
+                    }
+                  : {}),
                 ...(element.kind === "sudoku"
                   ? {
                       gridTemplateColumns: `repeat(${element.squares * element.squares}, minmax(0, 1fr))`,
                       gridTemplateRows: `repeat(${element.squares * element.squares}, minmax(0, 1fr))`,
                     }
-                  : {}),
+                  : element.kind === "word-search"
+                    ? {
+                        gridTemplateColumns: `repeat(${element.cols}, minmax(0, 1fr))`,
+                        gridTemplateRows: `repeat(${element.rows}, minmax(0, 1fr))`,
+                      }
+                    : {}),
                 transform:
                   element.kind === "shape" || element.kind === "artwork"
                     || element.kind === "image"
@@ -147,6 +166,59 @@ export function PageThumbnail({
                     </span>
                   );
                 })
+              ) : element.kind === "word-search" ? (
+                element.grid.flatMap((row, rowIndex) =>
+                  row.map((letter, columnIndex) => {
+                    const isSolutionCell =
+                      element.isSolution &&
+                      element.words.some((word) =>
+                        word.path.some(
+                          (point) =>
+                            point.x === columnIndex && point.y === rowIndex,
+                        ),
+                      );
+                    return (
+                      <span
+                        className="flex items-center justify-center overflow-hidden leading-none"
+                        key={`${rowIndex}-${columnIndex}`}
+                        style={{
+                          borderTop: `${Math.min(1, element.lineWeight / 4)}px solid ${element.color}`,
+                          borderLeft: `${Math.min(1, element.lineWeight / 4)}px solid ${element.color}`,
+                          borderRight:
+                            columnIndex === element.cols - 1
+                              ? `${Math.min(1, element.lineWeight / 4)}px solid ${element.color}`
+                              : undefined,
+                          borderBottom:
+                            rowIndex === element.rows - 1
+                              ? `${Math.min(1, element.lineWeight / 4)}px solid ${element.color}`
+                              : undefined,
+                          backgroundColor: isSolutionCell
+                            ? `${element.color}22`
+                            : undefined,
+                          color: element.color,
+                          fontSize: `${Math.min(3, element.letterSize / 6)}px`,
+                        }}
+                      >
+                        {letter}
+                      </span>
+                    );
+                  }),
+                )
+              ) : element.kind === "word-search-words" ? (
+                <span
+                  className="overflow-hidden"
+                  style={{
+                    color: element.color,
+                    fontFamily:
+                      element.fontFamily === "serif"
+                        ? "Georgia, serif"
+                        : element.fontFamily === "mono"
+                          ? '"Courier New", monospace'
+                          : "Arial, sans-serif",
+                  }}
+                >
+                  {element.words.map((word) => word.word).join(" ")}
+                </span>
               ) : null}
             </span>
           ))}

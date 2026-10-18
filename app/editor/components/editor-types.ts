@@ -117,6 +117,60 @@ export type SudokuEditorElement = ElementPosition & {
   solutionNumber?: number;
 };
 
+export type WordSearchPlacement = {
+  word: string;
+  clean: string;
+  path: { x: number; y: number }[];
+};
+
+export type WordSearchGenerationSettings = {
+  cols: number;
+  rows: number;
+  dictionaryName: string;
+  dictionary: string[];
+  maxWords: number;
+  pageCount: number;
+};
+
+export type WordSearchEditorElement = ElementPosition & {
+  kind: "word-search";
+  puzzleId: string;
+  rows: number;
+  cols: number;
+  grid: string[][];
+  words: WordSearchPlacement[];
+  dictionaryName: string;
+  color: string;
+  letterSize: number;
+  lineWeight: number;
+  isSolution: boolean;
+  solutionNumber?: number;
+};
+
+export type WordSearchWordsEditorElement = ElementPosition & {
+  kind: "word-search-words";
+  puzzleId: string;
+  words: WordSearchPlacement[];
+  color: string;
+  fontFamily: TextFontFamily;
+  fontSize: number;
+  spacing: number;
+  lineSpacing: number;
+  isSolution: boolean;
+  solutionNumber?: number;
+};
+
+export type WordSearchGridElementUpdates = Partial<
+  Pick<WordSearchEditorElement, "letterSize" | "lineWeight">
+>;
+
+export type WordSearchWordsElementUpdates = Partial<
+  Pick<
+    WordSearchWordsEditorElement,
+    "fontFamily" | "fontSize" | "spacing" | "lineSpacing"
+  >
+>;
+
 export type TextElementUpdates = Partial<
   Pick<
     TextEditorElement,
@@ -183,6 +237,8 @@ export type EditorElement =
   | TextEditorElement
   | ImageEditorElement
   | SudokuEditorElement
+  | WordSearchEditorElement
+  | WordSearchWordsEditorElement
   | (ElementPosition & {
       kind: "puzzle";
       puzzleType: string;
@@ -193,6 +249,6 @@ export type EditorElement =
 export type EditorPage = {
   id: string;
   title: string;
-  pageType?: "sudoku-solutions";
+  pageType?: "sudoku-solutions" | "puzzle-solutions";
   elements: EditorElement[];
 };

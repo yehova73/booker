@@ -26,6 +26,10 @@ import { TextElementOptions } from "./text-element-options";
 import { ART_LIBRARY } from "@/lib/designAssets";
 import { ImageElementOptions } from "./image-element-options";
 import { SudokuElementOptions } from "./sudoku-element-options";
+import {
+  WordSearchGridElementOptions,
+  WordSearchWordsElementOptions,
+} from "./word-search-element-options";
 
 export function RightSidebar() {
   const editor = useEditorContext();
@@ -173,6 +177,26 @@ export function RightSidebar() {
                         editor.setSudokuDifficulty(selectedElement.id, difficulty)
                       }
                     />
+                  ) : selectedElement.kind === "word-search" ? (
+                    <WordSearchGridElementOptions
+                      element={selectedElement}
+                      onChange={(updates) =>
+                        editor.updateWordSearchGridElement(
+                          selectedElement.id,
+                          updates,
+                        )
+                      }
+                    />
+                  ) : selectedElement.kind === "word-search-words" ? (
+                    <WordSearchWordsElementOptions
+                      element={selectedElement}
+                      onChange={(updates) =>
+                        editor.updateWordSearchWordsElement(
+                          selectedElement.id,
+                          updates,
+                        )
+                      }
+                    />
                   ) : (
                     <p className="text-[11px] text-[#909991]">
                       Options for this element are coming soon.
@@ -219,7 +243,10 @@ function LayerRow({
       ? Type
       : element.kind === "image"
         ? ImageIcon
-        : element.kind === "puzzle" || element.kind === "sudoku"
+        : element.kind === "puzzle" ||
+            element.kind === "sudoku" ||
+            element.kind === "word-search" ||
+            element.kind === "word-search-words"
           ? Puzzle
           : element.kind === "artwork"
             ? ImageIcon
@@ -285,6 +312,8 @@ function elementLabel(element: EditorElement) {
   if (element.kind === "image") return element.alt || "Image";
   if (element.kind === "puzzle") return element.puzzleType;
   if (element.kind === "sudoku") return "Sudoku";
+  if (element.kind === "word-search") return "Word Search Grid";
+  if (element.kind === "word-search-words") return "Word Search Words";
   if (element.kind === "artwork") {
     return (
       ART_LIBRARY.find((artwork) => artwork.key === element.artKey)?.label ??

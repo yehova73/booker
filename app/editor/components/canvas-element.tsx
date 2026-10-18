@@ -261,7 +261,11 @@ export function CanvasElement({
             ? element.shapeType
             : element.kind === "sudoku"
               ? "Sudoku puzzle"
-            : element.kind
+              : element.kind === "word-search"
+                ? "Word Search puzzle"
+                  : element.kind === "word-search-words"
+                    ? "Word Search words"
+                  : element.kind
       }
       className={`absolute z-10 touch-none rounded-sm ${
         isDragging ? "cursor-grabbing" : "cursor-grab"
@@ -344,7 +348,9 @@ export function CanvasElement({
           element.kind === "shape" ||
           element.kind === "artwork" ||
           element.kind === "image" ||
-          element.kind === "sudoku") &&
+          element.kind === "sudoku" ||
+          element.kind === "word-search" ||
+          element.kind === "word-search-words") &&
       overlayTarget &&
       createPortal(
         <div
@@ -450,6 +456,12 @@ function FutureElement({
   if (element.kind === "sudoku") {
     return <SudokuGraphic element={element} />;
   }
+  if (element.kind === "word-search") {
+    return <WordSearchGraphic element={element} />;
+  }
+  if (element.kind === "word-search-words") {
+    return <WordSearchWordsGraphic element={element} />;
+  }
   if (element.kind === "artwork") {
     const src = getArtSvgDataUri(
       element.artKey,
@@ -524,6 +536,104 @@ function SudokuGraphic({
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function WordSearchGraphic({
+  element,
+}: {
+  element: Extract<EditorElement, { kind: "word-search" }>;
+}) {
+  const solutionCells = new Set(
+    element.words.flatMap((word) =>
+      word.path.map(({ x, y }) => `${x}-${y}`),
+    ),
+  );
+
+  return (
+    <div className="relative flex size-full items-center justify-center overflow-hidden p-1">
+      {element.isSolution && element.solutionNumber && (
+        <span className="absolute left-1 top-1 text-[10px] font-medium text-[#68736b]">
+          Solution {element.solutionNumber}
+        </span>
+      )}
+      <div
+        aria-label="Word Search letter grid"
+        className="grid size-full"
+        role="grid"
+        style={{
+          gridTemplateColumns: `repeat(${element.cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${element.rows}, minmax(0, 1fr))`,
+        }}
+      >
+        {element.grid.flatMap((row, rowIndex) =>
+          row.map((letter, columnIndex) => {
+            const isSolutionCell = solutionCells.has(
+              `${columnIndex}-${rowIndex}`,
+            );
+            const outerRight = columnIndex === element.cols - 1;
+            const outerBottom = rowIndex === element.rows - 1;
+            return (
+              <span
+                aria-label={`${letter}, row ${rowIndex + 1}, column ${columnIndex + 1}`}
+                className="flex min-w-0 items-center justify-center leading-none"
+                key={`${rowIndex}-${columnIndex}`}
+                role="gridcell"
+                style={{
+                  borderTop: `${element.lineWeight}px solid ${element.color}`,
+                  borderLeft: `${element.lineWeight}px solid ${element.color}`,
+                  borderRight: outerRight
+                    ? `${element.lineWeight}px solid ${element.color}`
+                    : undefined,
+                  borderBottom: outerBottom
+                    ? `${element.lineWeight}px solid ${element.color}`
+                    : undefined,
+                  backgroundColor:
+                    element.isSolution && isSolutionCell
+                      ? `${element.color}22`
+                      : "#fffefa",
+                  color: element.color,
+                  fontSize: `${element.letterSize}px`,
+                }}
+              >
+                {letter}
+              </span>
+            );
+          }),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WordSearchWordsGraphic({
+  element,
+}: {
+  element: Extract<EditorElement, { kind: "word-search-words" }>;
+}) {
+  return (
+    <div
+      aria-label="Words to find"
+      className="flex size-full flex-wrap content-center justify-center gap-x-3 overflow-hidden p-1"
+      style={{
+        color: element.color,
+        fontFamily: fontFamilies[element.fontFamily],
+        fontSize: `${element.fontSize}px`,
+        letterSpacing: `${element.spacing}px`,
+        rowGap: `${element.lineSpacing}px`,
+      }}
+    >
+      {element.isSolution && element.solutionNumber && (
+        <span className="w-full text-center font-medium">
+          Solution {element.solutionNumber}
+        </span>
+      )}
+      {element.words.map((word) => (
+        <span className="whitespace-nowrap" key={word.clean}>
+          {word.word}
+        </span>
+      ))}
     </div>
   );
 }
