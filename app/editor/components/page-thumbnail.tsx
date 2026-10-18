@@ -4,6 +4,8 @@ import { CopyPlus, Trash2 } from "lucide-react";
 
 import type { EditorPage } from "./editor-types";
 import { ShapeGraphic } from "./shape-graphic";
+import { getArtSvgDataUri } from "@/lib/designAssets";
+import { buildImageFilter } from "./image-filters";
 
 export function PageThumbnail({
   page,
@@ -46,7 +48,11 @@ export function PageThumbnail({
                   ? "absolute block overflow-hidden font-serif leading-tight text-[#526454]"
                   : element.kind === "shape"
                     ? "absolute block overflow-visible"
-                    : "absolute block rounded-[1px] bg-[#dce6d8]"
+                    : element.kind === "image"
+                      ? "absolute block overflow-hidden"
+                      : element.kind === "artwork"
+                        ? "absolute block"
+                        : "absolute block rounded-[1px] bg-[#dce6d8]"
               }
               key={element.id}
               style={{
@@ -59,15 +65,46 @@ export function PageThumbnail({
                     : `${Math.max(4, element.height)}%`,
                 fontSize: "3px",
                 transform:
-                  element.kind === "shape"
+                  element.kind === "shape" || element.kind === "artwork"
+                    || element.kind === "image"
                     ? `rotate(${element.rotation}deg)`
                     : undefined,
+                ...(element.kind === "image"
+                  ? {
+                      border: `${element.borderWidth}px solid ${element.borderColor}`,
+                      borderRadius: `${element.borderRadius}px`,
+                    }
+                  : {}),
               }}
             >
               {element.kind === "text" ? (
                 element.content
+              ) : element.kind === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt=""
+                  className="size-full object-cover"
+                  src={element.src}
+                  style={{
+                    filter: buildImageFilter(element.filters),
+                    opacity: element.opacity / 100,
+                  }}
+                />
               ) : element.kind === "shape" ? (
                 <ShapeGraphic element={element} />
+              ) : element.kind === "artwork" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt=""
+                  className="size-full"
+                  src={
+                    getArtSvgDataUri(
+                      element.artKey,
+                      element.strokeColor,
+                      element.strokeWidth,
+                    ) ?? undefined
+                  }
+                />
               ) : null}
             </span>
           ))}

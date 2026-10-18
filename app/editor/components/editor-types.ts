@@ -24,8 +24,15 @@ export type ShapeType =
   | "pentagon"
   | "line"
   | "arrow"
-  | "speech-bubble"
-  | "divider";
+  | "speech-bubble";
+export type LineStyle =
+  | "thin"
+  | "thick"
+  | "dashed"
+  | "dotted"
+  | "double"
+  | "ornament";
+export type LineCapStyle = "round" | "square";
 
 type ElementPosition = {
   id: string;
@@ -55,6 +62,8 @@ export type TextEditorElement = ElementPosition & {
 export type ShapeEditorElement = ElementPosition & {
   kind: "shape";
   shapeType: ShapeType;
+  lineStyle: LineStyle;
+  lineCap: LineCapStyle;
   fillColor: string;
   outlineColor: string | null;
   outlineWidth: number;
@@ -62,6 +71,36 @@ export type ShapeEditorElement = ElementPosition & {
   cornerRadius: number;
   starPoints: number;
   pentagonSides: number;
+};
+
+export type ArtworkEditorElement = ElementPosition & {
+  kind: "artwork";
+  artKey: string;
+  strokeColor: string;
+  strokeWidth: number;
+  rotation: number;
+};
+
+export type ImageFilterSettings = {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  grayscale: number;
+  sepia: number;
+  blur: number;
+  hueRotation: number;
+};
+
+export type ImageEditorElement = ElementPosition & {
+  kind: "image";
+  src: string;
+  alt: string;
+  borderColor: string;
+  borderWidth: number;
+  borderRadius: number;
+  opacity: number;
+  rotation: number;
+  filters: ImageFilterSettings;
 };
 
 export type TextElementUpdates = Partial<
@@ -86,6 +125,8 @@ export type ShapeElementUpdates = Partial<
     ShapeEditorElement,
     | "width"
     | "height"
+    | "lineStyle"
+    | "lineCap"
     | "fillColor"
     | "outlineColor"
     | "outlineWidth"
@@ -96,18 +137,36 @@ export type ShapeElementUpdates = Partial<
   >
 >;
 
+export type ArtworkElementUpdates = Partial<
+  Pick<
+    ArtworkEditorElement,
+    "width" | "height" | "strokeColor" | "strokeWidth" | "rotation"
+  >
+>;
+
+export type ImageElementUpdates = Partial<
+  Pick<
+    ImageEditorElement,
+    | "width"
+    | "height"
+    | "borderColor"
+    | "borderWidth"
+    | "borderRadius"
+    | "opacity"
+    | "rotation"
+    | "filters"
+  >
+>;
+
 export type EditorElement =
   | TextEditorElement
-  | (ElementPosition & {
-      kind: "image";
-      src: string;
-      alt: string;
-    })
+  | ImageEditorElement
   | (ElementPosition & {
       kind: "puzzle";
       puzzleType: string;
     })
-  | ShapeEditorElement;
+  | ShapeEditorElement
+  | ArtworkEditorElement;
 
 export type EditorPage = {
   id: string;

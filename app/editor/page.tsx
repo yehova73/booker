@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { EditorProvider, useEditorContext } from "./editor-context";
 import { EditorHeader } from "./components/header";
 import { LeftSidebar } from "./components/left-sidebar";
@@ -19,6 +21,30 @@ export default function EditorPage() {
 
 function EditorWorkspace() {
   const editor = useEditorContext();
+  const selectedElementId = editor.selectedElementId;
+  const deleteElement = editor.deleteElement;
+
+  useEffect(() => {
+    if (!selectedElementId) return;
+
+    const elementId = selectedElementId;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.closest("input, textarea, select, [contenteditable='true']"))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      deleteElement(elementId);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deleteElement, selectedElementId]);
 
   return (
     <TooltipProvider>
@@ -48,6 +74,8 @@ function EditorWorkspace() {
           <LeftSidebar
             onInsertText={editor.addTextElement}
             onInsertShape={editor.addShapeElement}
+            onInsertArtwork={editor.addArtworkElement}
+            onInsertImage={editor.addImageElement}
           />
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-[#f5f6f3]">
             <div className="flex min-h-0 flex-1">
@@ -62,6 +90,7 @@ function EditorWorkspace() {
                 onSelectElement={editor.selectElement}
                 onMoveElement={editor.moveElement}
                 onResizeElement={editor.resizeElement}
+                onRotateElement={editor.rotateElement}
                 onUpdateText={editor.updateTextContent}
               />
             </div>

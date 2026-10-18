@@ -9,6 +9,7 @@ import {
   Layers2,
   Puzzle,
   Shapes,
+  Trash2,
   Type,
 } from "lucide-react";
 
@@ -19,8 +20,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useEditorContext } from "../editor-context";
 import type { EditorElement } from "./editor-types";
+import { ArtworkElementOptions } from "./artwork-element-options";
 import { ShapeElementOptions } from "./shape-element-options";
 import { TextElementOptions } from "./text-element-options";
+import { ART_LIBRARY } from "@/lib/designAssets";
+import { ImageElementOptions } from "./image-element-options";
 
 export function RightSidebar() {
   const editor = useEditorContext();
@@ -56,7 +60,7 @@ export function RightSidebar() {
           </div>
 
           <TabsContent className="min-h-0 overflow-y-auto" value="current-page">
-            <div className="space-y-2 p-3 flex flex-col h-full">
+            <div className="space-y-2 p-3 flex flex-col h-full flex flex-col">
               {!selectedElement && (
                 <>
                   <div className="flex items-center justify-between">
@@ -69,10 +73,9 @@ export function RightSidebar() {
                       page
                     </p>
                   </div>
-
                   <section
                     aria-label="Page layers"
-                    className="flex flex-col h-full"
+                    className="flex flex-col grow"
                   >
                     <div className="space-y-1">
                       {layers.length === 0 ? (
@@ -94,6 +97,7 @@ export function RightSidebar() {
                             onMoveDown={() =>
                               editor.reorderElement(element.id, -1)
                             }
+                            onDelete={() => editor.deleteElement(element.id)}
                           />
                         ))
                       )}
@@ -105,7 +109,7 @@ export function RightSidebar() {
                         settings.
                       </p>
                     </div>
-                  </section>
+                  </section>{" "}
                 </>
               )}
 
@@ -136,8 +140,25 @@ export function RightSidebar() {
                   ) : selectedElement.kind === "shape" ? (
                     <ShapeElementOptions
                       element={selectedElement}
+                      trimPreset={editor.trimPreset}
                       onChange={(updates) =>
                         editor.updateShapeElement(selectedElement.id, updates)
+                      }
+                    />
+                  ) : selectedElement.kind === "artwork" ? (
+                    <ArtworkElementOptions
+                      element={selectedElement}
+                      trimPreset={editor.trimPreset}
+                      onChange={(updates) =>
+                        editor.updateArtworkElement(selectedElement.id, updates)
+                      }
+                    />
+                  ) : selectedElement.kind === "image" ? (
+                    <ImageElementOptions
+                      element={selectedElement}
+                      trimPreset={editor.trimPreset}
+                      onChange={(updates) =>
+                        editor.updateImageElement(selectedElement.id, updates)
                       }
                     />
                   ) : (
@@ -170,6 +191,7 @@ function LayerRow({
   onSelect,
   onMoveUp,
   onMoveDown,
+  onDelete,
 }: {
   element: EditorElement;
   selected: boolean;
@@ -178,6 +200,7 @@ function LayerRow({
   onSelect: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onDelete: () => void;
 }) {
   const Icon =
     element.kind === "text"
@@ -186,7 +209,9 @@ function LayerRow({
         ? ImageIcon
         : element.kind === "puzzle"
           ? Puzzle
-          : Shapes;
+          : element.kind === "artwork"
+            ? ImageIcon
+            : Shapes;
 
   return (
     <div
@@ -226,6 +251,15 @@ function LayerRow({
         >
           <ArrowDown />
         </Button>
+        <Button
+          aria-label={`Delete ${elementLabel(element)}`}
+          className="size-6 text-[#859087] hover:text-red-600"
+          onClick={onDelete}
+          size="icon"
+          variant="ghost"
+        >
+          <Trash2 />
+        </Button>
       </div>
     </div>
   );
@@ -238,5 +272,11 @@ function elementLabel(element: EditorElement) {
   }
   if (element.kind === "image") return element.alt || "Image";
   if (element.kind === "puzzle") return element.puzzleType;
+  if (element.kind === "artwork") {
+    return (
+      ART_LIBRARY.find((artwork) => artwork.key === element.artKey)?.label ??
+      "Artwork"
+    );
+  }
   return element.shapeType;
 }

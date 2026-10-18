@@ -12,6 +12,12 @@ import {
 import type {
   EditorElement,
   EditorPage,
+  ArtworkElementUpdates,
+  ImageEditorElement,
+  ImageElementUpdates,
+  ImageFilterSettings,
+  LineCapStyle,
+  LineStyle,
   SaveStatus,
   ShapeEditorElement,
   ShapeElementUpdates,
@@ -23,8 +29,18 @@ import type {
   TrimPreset,
   ZoomLevel,
 } from "./components/editor-types";
+import { ART_LIBRARY, SHAPE_TYPES } from "@/lib/designAssets";
 
 const storageKey = "booker-editor-document";
+const defaultImageFilters: ImageFilterSettings = {
+  brightness: 100,
+  contrast: 100,
+  saturation: 100,
+  grayscale: 0,
+  sepia: 0,
+  blur: 0,
+  hueRotation: 0,
+};
 const initialDocument: EditorDocument = {
   bookName: "Untitled Book",
   pages: [{ id: "page-1", title: "Page 1", elements: [] }],
@@ -139,14 +155,26 @@ type EditorContextValue = EditorDocument & {
   clonePage: (pageId: string) => void;
   deletePage: (pageId: string) => void;
   addTextElement: (textStyle: TextStyle) => void;
+  addImageElement: (src: string, alt: string) => void;
   addShapeElement: (shapeType: ShapeType) => void;
+  addArtworkElement: (artKey: string) => void;
+  deleteElement: (elementId: string) => void;
   updateTextContent: (elementId: string, content: string) => void;
   updateTextElement: (elementId: string, updates: TextElementUpdates) => void;
   updateShapeElement: (elementId: string, updates: ShapeElementUpdates) => void;
+  updateArtworkElement: (
+    elementId: string,
+    updates: ArtworkElementUpdates,
+  ) => void;
+  updateImageElement: (
+    elementId: string,
+    updates: ImageElementUpdates,
+  ) => void;
   moveElement: (elementId: string, position: { x: number; y: number }) => void;
+  rotateElement: (elementId: string, rotation: number) => void;
   resizeElement: (
     elementId: string,
-    size: { width: number; height: number },
+    size: { x: number; y: number; width: number; height: number },
   ) => void;
   reorderElement: (elementId: string, direction: -1 | 1) => void;
   selectElement: (elementId: string | null) => void;
@@ -168,19 +196,6 @@ const textStyles: TextStyle[] = [
   "pull-quote",
   "caption",
   "chapter-title",
-];
-
-const shapeTypes: ShapeType[] = [
-  "rectangle",
-  "circle",
-  "ellipse",
-  "triangle",
-  "star",
-  "pentagon",
-  "line",
-  "arrow",
-  "speech-bubble",
-  "divider",
 ];
 
 const defaultText: Record<TextStyle, string> = {
@@ -318,6 +333,38 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         });
         selectElement(element.id);
       },
+      addImageElement: (src, alt) => {
+        const topLayer = Math.max(
+          -1,
+          ...currentPage.elements.map((element) => element.zIndex),
+        );
+        const element: ImageEditorElement = {
+          id: crypto.randomUUID(),
+          kind: "image",
+          src,
+          alt,
+          borderColor: "#1e293b",
+          borderWidth: 0,
+          borderRadius: 0,
+          opacity: 100,
+          rotation: 0,
+          filters: { ...defaultImageFilters },
+          x: 14,
+          y: 16 + Math.min(currentPage.elements.length, 5) * 6,
+          width: 40,
+          height: 32,
+          zIndex: topLayer + 1,
+        };
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) => [...elements, element],
+          ),
+        });
+        selectElement(element.id);
+      },
       addShapeElement: (shapeType) => {
         const topLayer = Math.max(
           -1,
@@ -329,14 +376,16 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           "star",
           "pentagon",
         ].includes(shapeType);
-        const isLine = shapeType === "line" || shapeType === "divider";
+        const isLine = shapeType === "line";
         const element: ShapeEditorElement = {
           id: crypto.randomUUID(),
           kind: "shape",
           shapeType,
+          lineStyle: "thin",
+          lineCap: "round",
           fillColor: "#dce6d8",
           outlineColor: null,
-          outlineWidth: 2,
+          outlineWidth: isLine ? 1 : 2,
           rotation: 0,
           cornerRadius: 0,
           starPoints: 5,
@@ -356,6 +405,47 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           ),
         });
         selectElement(element.id);
+      },
+      addArtworkElement: (artKey) => {
+        const topLayer = Math.max(
+          -1,
+          ...currentPage.elements.map((element) => element.zIndex),
+        );
+        const element: EditorElement = {
+          id: crypto.randomUUID(),
+          kind: "artwork",
+          artKey,
+          strokeColor: "#1e293b",
+          strokeWidth: 1.8,
+          rotation: 0,
+          x: 14,
+          y: 16 + Math.min(currentPage.elements.length, 5) * 6,
+          width: 30,
+          height: 30,
+          zIndex: topLayer + 1,
+        };
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) => [...elements, element],
+          ),
+        });
+        selectElement(element.id);
+      },
+      deleteElement: (elementId) => {
+        if (!currentPage.elements.some((element) => element.id === elementId))
+          return;
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) => elements.filter((element) => element.id !== elementId),
+          ),
+        });
+        if (selectedElementId === elementId) selectElement(null);
       },
       updateTextContent: (elementId, content) => {
         saveDocument({
@@ -385,8 +475,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                 const updated = { ...element, ...updates };
                 return {
                   ...updated,
-                  width: clamp(updated.width, 8, 100 - updated.x),
-                  height: clamp(updated.height, 5, 100 - updated.y),
+                  width: Math.max(0.1, updated.width),
+                  height: Math.max(0.1, updated.height),
                   rotation: clamp(updated.rotation, -180, 180),
                   outlineWidth: clamp(updated.outlineWidth, 0, 20),
                   cornerRadius: clamp(updated.cornerRadius, 0, 50),
@@ -394,6 +484,56 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                   pentagonSides: Math.round(
                     clamp(updated.pentagonSides, 3, 12),
                   ),
+                };
+              }),
+          ),
+        });
+      },
+      updateArtworkElement: (elementId, updates) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) => {
+                if (element.id !== elementId || element.kind !== "artwork")
+                  return element;
+                const updated = { ...element, ...updates };
+                return {
+                  ...updated,
+                  width: Math.max(0.1, updated.width),
+                  height: Math.max(0.1, updated.height),
+                  strokeWidth: clamp(updated.strokeWidth, 0, 20),
+                  rotation: clamp(updated.rotation, -180, 180),
+                };
+              }),
+          ),
+        });
+      },
+      updateImageElement: (elementId, updates) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) => {
+                if (element.id !== elementId || element.kind !== "image")
+                  return element;
+                const updated = { ...element, ...updates };
+                return {
+                  ...updated,
+                  width: Math.max(0.1, updated.width),
+                  height: Math.max(0.1, updated.height),
+                  borderColor: isHexColor(updated.borderColor)
+                    ? updated.borderColor
+                    : "#1e293b",
+                  borderWidth: clamp(updated.borderWidth, 0, 20),
+                  borderRadius: clamp(updated.borderRadius, 0, 100),
+                  opacity: clamp(updated.opacity, 0, 100),
+                  rotation: clamp(updated.rotation, -180, 180),
+                  filters: normalizeImageFilters(updated.filters),
                 };
               }),
           ),
@@ -429,7 +569,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           ),
         });
       },
-      resizeElement: (elementId, size) => {
+      rotateElement: (elementId, rotation) => {
         saveDocument({
           ...document,
           pages: updatePageElements(
@@ -437,14 +577,30 @@ export function EditorProvider({ children }: { children: ReactNode }) {
             currentPage.id,
             (elements) =>
               elements.map((element) =>
-                element.id === elementId
-                  ? {
-                      ...element,
-                      width: clamp(size.width, 8, 100 - element.x),
-                      height: clamp(size.height, 5, 100 - element.y),
-                    }
+                element.id === elementId && "rotation" in element
+                  ? { ...element, rotation: clamp(rotation, -180, 180) }
                   : element,
               ),
+          ),
+        });
+      },
+      resizeElement: (elementId, size) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) => {
+                if (element.id !== elementId) return element;
+                return {
+                  ...element,
+                  x: size.x,
+                  y: size.y,
+                  width: Math.max(0.1, size.width),
+                  height: Math.max(0.1, size.height),
+                };
+              }),
           ),
         });
       },
@@ -490,6 +646,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   return (
     <editorContext.Provider value={value}>{children}</editorContext.Provider>
   );
+}
+
+function isLineCapStyle(value: unknown): value is LineCapStyle {
+  return value === "round" || value === "square";
 }
 
 export function useEditorContext() {
@@ -651,14 +811,12 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
     return null;
   }
 
-  const x = clamp(value.x, 0, 99);
-  const y = clamp(value.y, 0, 99);
   const position = {
     id: value.id,
-    x,
-    y,
-    width: clamp(value.width, 8, 100 - x),
-    height: clamp(value.height, 5, 100 - y),
+    x: value.x,
+    y: value.y,
+    width: Math.max(0.1, value.width),
+    height: Math.max(0.1, value.height),
     zIndex: isFiniteNumber(value.zIndex) ? value.zIndex : index,
   };
 
@@ -707,10 +865,47 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
     typeof value.src === "string" &&
     typeof value.alt === "string"
   ) {
-    return { ...position, kind: "image", src: value.src, alt: value.alt };
+    return {
+      ...position,
+      kind: "image",
+      src: value.src,
+      alt: value.alt,
+      width: Math.max(0.1, value.width),
+      height: Math.max(0.1, value.height),
+      borderColor: isHexColor(value.borderColor)
+        ? value.borderColor
+        : "#1e293b",
+      borderWidth: isFiniteNumber(value.borderWidth)
+        ? clamp(value.borderWidth, 0, 20)
+        : 0,
+      borderRadius: isFiniteNumber(value.borderRadius)
+        ? clamp(value.borderRadius, 0, 100)
+        : 0,
+      opacity: isFiniteNumber(value.opacity) ? clamp(value.opacity, 0, 100) : 100,
+      rotation: isFiniteNumber(value.rotation)
+        ? clamp(value.rotation, -180, 180)
+        : 0,
+      filters: normalizeImageFilters(value.filters),
+    };
   }
   if (value.kind === "puzzle" && typeof value.puzzleType === "string") {
     return { ...position, kind: "puzzle", puzzleType: value.puzzleType };
+  }
+  if (value.kind === "artwork" && isArtKey(value.artKey)) {
+    return {
+      ...position,
+      kind: "artwork",
+      artKey: value.artKey,
+      strokeColor: isHexColor(value.strokeColor)
+        ? value.strokeColor
+        : "#1e293b",
+      strokeWidth: isFiniteNumber(value.strokeWidth)
+        ? clamp(value.strokeWidth, 0, 20)
+        : 1.8,
+      rotation: isFiniteNumber(value.rotation)
+        ? clamp(value.rotation, -180, 180)
+        : 0,
+    };
   }
   if (value.kind === "shape") {
     const shapeType = normalizeShapeType(value.shapeType);
@@ -723,6 +918,10 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
       ...position,
       kind: "shape",
       shapeType,
+      lineStyle: isLineStyle(value.lineStyle) ? value.lineStyle : "thin",
+      lineCap: isLineCapStyle(value.lineCap) ? value.lineCap : "round",
+      width: Math.max(0.1, value.width),
+      height: Math.max(0.1, value.height),
       fillColor: isHexColor(value.fillColor) ? value.fillColor : "#dce6d8",
       outlineColor:
         value.outlineColor === null
@@ -848,12 +1047,31 @@ function isEditorElement(value: unknown): value is EditorElement {
     );
   }
   if (value.kind === "image") {
-    return typeof value.src === "string" && typeof value.alt === "string";
+    return (
+      typeof value.src === "string" &&
+      typeof value.alt === "string" &&
+      isHexColor(value.borderColor) &&
+      isFiniteNumber(value.borderWidth) &&
+      isFiniteNumber(value.borderRadius) &&
+      isFiniteNumber(value.opacity) &&
+      isFiniteNumber(value.rotation) &&
+      isImageFilterSettings(value.filters)
+    );
   }
   if (value.kind === "puzzle") return typeof value.puzzleType === "string";
+  if (value.kind === "artwork") {
+    return (
+      isArtKey(value.artKey) &&
+      isHexColor(value.strokeColor) &&
+      isFiniteNumber(value.strokeWidth) &&
+      isFiniteNumber(value.rotation)
+    );
+  }
   if (value.kind === "shape") {
     return (
       isShapeType(value.shapeType) &&
+      isLineStyle(value.lineStyle) &&
+      isLineCapStyle(value.lineCap) &&
       isHexColor(value.fillColor) &&
       (value.outlineColor === null || isHexColor(value.outlineColor)) &&
       isFiniteNumber(value.outlineWidth) &&
@@ -895,11 +1113,69 @@ function normalizeShapeType(value: unknown): ShapeType | null {
   if (typeof value !== "string") return null;
   const normalized = value.toLowerCase().replaceAll(" ", "-");
   if (normalized === "rounded-rectangle") return "rectangle";
+  if (normalized === "divider") return "line";
   return isShapeType(normalized) ? normalized : null;
 }
 
 function isShapeType(value: unknown): value is ShapeType {
-  return typeof value === "string" && shapeTypes.includes(value as ShapeType);
+  return typeof value === "string" && SHAPE_TYPES.includes(value as ShapeType);
+}
+
+function isLineStyle(value: unknown): value is LineStyle {
+  return (
+    value === "thin" ||
+    value === "thick" ||
+    value === "dashed" ||
+    value === "dotted" ||
+    value === "double" ||
+    value === "ornament"
+  );
+}
+
+function normalizeImageFilters(value: unknown): ImageFilterSettings {
+  const filters = isRecord(value) ? value : {};
+  return {
+    brightness: isFiniteNumber(filters.brightness)
+      ? clamp(filters.brightness, 0, 200)
+      : defaultImageFilters.brightness,
+    contrast: isFiniteNumber(filters.contrast)
+      ? clamp(filters.contrast, 0, 200)
+      : defaultImageFilters.contrast,
+    saturation: isFiniteNumber(filters.saturation)
+      ? clamp(filters.saturation, 0, 200)
+      : defaultImageFilters.saturation,
+    grayscale: isFiniteNumber(filters.grayscale)
+      ? clamp(filters.grayscale, 0, 100)
+      : defaultImageFilters.grayscale,
+    sepia: isFiniteNumber(filters.sepia)
+      ? clamp(filters.sepia, 0, 100)
+      : defaultImageFilters.sepia,
+    blur: isFiniteNumber(filters.blur)
+      ? clamp(filters.blur, 0, 20)
+      : defaultImageFilters.blur,
+    hueRotation: isFiniteNumber(filters.hueRotation)
+      ? clamp(filters.hueRotation, 0, 360)
+      : defaultImageFilters.hueRotation,
+  };
+}
+
+function isImageFilterSettings(value: unknown): value is ImageFilterSettings {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.brightness) &&
+    isFiniteNumber(value.contrast) &&
+    isFiniteNumber(value.saturation) &&
+    isFiniteNumber(value.grayscale) &&
+    isFiniteNumber(value.sepia) &&
+    isFiniteNumber(value.blur) &&
+    isFiniteNumber(value.hueRotation)
+  );
+}
+
+function isArtKey(value: unknown): value is string {
+  return (
+    typeof value === "string" && ART_LIBRARY.some((item) => item.key === value)
+  );
 }
 
 function isHexColor(value: unknown): value is string {

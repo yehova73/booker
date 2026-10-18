@@ -1,23 +1,20 @@
 "use client";
 
+import { useRef, useState, type ChangeEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  ArrowRight,
   ChevronRight,
   Circle,
   Image as ImageIcon,
   Layers2,
-  LayoutTemplate,
   Minus,
   Puzzle,
   Shapes,
   Sparkles,
   Type,
   Upload,
-  WandSparkles,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,13 +28,13 @@ import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarMenuButton,
   SidebarGroupLabel,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import type { ShapeType, TextStyle } from "./editor-types";
+import { ART_LIBRARY, SHAPE_LIBRARY } from "@/lib/designAssets";
 
 const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Paragraph", style: "paragraph" },
@@ -51,30 +48,17 @@ const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Chapter title", style: "chapter-title" },
 ];
 
-const shapeOptions: { label: string; shapeType: ShapeType }[] = [
-  { label: "Rectangle", shapeType: "rectangle" },
-  { label: "Circle", shapeType: "circle" },
-  { label: "Ellipse", shapeType: "ellipse" },
-  { label: "Triangle", shapeType: "triangle" },
-  { label: "Star", shapeType: "star" },
-  { label: "Pentagon", shapeType: "pentagon" },
-  { label: "Line", shapeType: "line" },
-  { label: "Arrow", shapeType: "arrow" },
-  { label: "Speech bubble", shapeType: "speech-bubble" },
-  { label: "Divider", shapeType: "divider" },
-];
-
 const categories: { title: string; icon: LucideIcon; items: string[] }[] = [
   { title: "Text", icon: Type, items: textOptions.map(({ label }) => label) },
   {
     title: "Shapes",
     icon: Shapes,
-    items: shapeOptions.map(({ label }) => label),
+    items: SHAPE_LIBRARY.map(({ label }) => label),
   },
   {
-    title: "Image",
+    title: "Artwork",
     icon: ImageIcon,
-    items: ["Upload image", "Image frame", "Illustration", "Background image"],
+    items: ART_LIBRARY.map(({ label }) => label),
   },
   {
     title: "Puzzles",
@@ -89,39 +73,18 @@ const categories: { title: string; icon: LucideIcon; items: string[] }[] = [
       "Coloring page",
     ],
   },
-  {
-    title: "Decor & extras",
-    icon: Sparkles,
-    items: [
-      "Sticker",
-      "Icon",
-      "Border",
-      "Page number",
-      "Running header",
-      "Table of contents",
-      "QR code",
-      "Callout",
-      "Map",
-    ],
-  },
-  {
-    title: "Layouts",
-    icon: LayoutTemplate,
-    items: [
-      "Page template",
-      "Two-column layout",
-      "Activity layout",
-      "Blank page",
-    ],
-  },
 ];
 
 export function LeftSidebar({
   onInsertText,
   onInsertShape,
+  onInsertArtwork,
+  onInsertImage,
 }: {
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
+  onInsertArtwork: (artKey: string) => void;
+  onInsertImage: (src: string, alt: string) => void;
 }) {
   const { open } = useSidebar("left");
   return (
@@ -136,69 +99,88 @@ export function LeftSidebar({
         <nav aria-label="Book content" className="flex-1">
           <div className="space-y-1">
             {categories.map(({ title, icon: Icon, items }) => (
-              <DropdownMenu key={title}>
-                <DropdownMenuTrigger
-                  render={
-                    <SidebarMenuButton className="cursor-pointer h-10 w-full justify-start gap-3 px-2.5 text-[13px] font-medium text-[#46524a] hover:bg-[#f3f6f2] hover:text-[#315d44] max-sm:justify-center max-sm:px-0" />
-                  }
-                >
-                  <span
-                    className={cn(
-                      "flex size-7 items-center justify-center rounded-lg transition",
-                      open && "bg-[#f3f5f2] text-[#718077]",
-                    )}
+              <div key={title}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <SidebarMenuButton className="cursor-pointer h-10 w-full justify-start gap-3 px-2.5 text-[13px] font-medium text-[#46524a] hover:bg-[#f3f6f2] hover:text-[#315d44] max-sm:justify-center max-sm:px-0" />
+                    }
                   >
-                    <Icon className="size-4" strokeWidth={1.8} />
-                  </span>
-                  <span className="flex-1 text-left max-sm:hidden">
-                    {title}
-                  </span>
-                  <ChevronRight className="size-3.5 text-[#9aa39d] max-sm:hidden" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="w-60"
-                  side="right"
-                >
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel className="px-2 py-1.5">
-                      {title === "Text"
-                        ? "Add text"
-                        : title === "Shapes"
-                          ? "Add shape"
-                          : "Coming soon"}
-                    </DropdownMenuLabel>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    {items.map((item) => (
-                      <DropdownMenuItem
-                        className="cursor-pointer gap-2 px-2 py-2"
-                        disabled={title !== "Text" && title !== "Shapes"}
-                        key={item}
-                        onClick={() => {
-                          if (title === "Text") {
-                            const option = textOptions.find(
-                              (candidate) => candidate.label === item,
-                            );
-                            if (option) onInsertText(option.style);
-                          } else if (title === "Shapes") {
-                            const option = shapeOptions.find(
-                              (candidate) => candidate.label === item,
-                            );
-                            if (option) onInsertShape(option.shapeType);
+                    <span
+                      className={cn(
+                        "flex size-7 items-center justify-center rounded-lg transition",
+                        open && "bg-[#f3f5f2] text-[#718077]",
+                      )}
+                    >
+                      <Icon className="size-4" strokeWidth={1.8} />
+                    </span>
+                    <span className="flex-1 text-left max-sm:hidden">
+                      {title}
+                    </span>
+                    <ChevronRight className="size-3.5 text-[#9aa39d] max-sm:hidden" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-60"
+                    side="right"
+                  >
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="px-2 py-1.5">
+                        {title === "Text"
+                          ? "Add text"
+                          : title === "Shapes"
+                            ? "Add shape"
+                            : title === "Artwork"
+                              ? "Add artwork"
+                              : "Coming soon"}
+                      </DropdownMenuLabel>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      {items.map((item) => (
+                        <DropdownMenuItem
+                          className="cursor-pointer gap-2 px-2 py-2"
+                          disabled={
+                            title !== "Text" &&
+                            title !== "Shapes" &&
+                            title !== "Artwork"
                           }
-                        }}
-                      >
-                        <span className="flex size-6 items-center justify-center rounded-md bg-[#f3f6f2] text-[#66816d]">
-                          <InsertIcon item={item} />
-                        </span>
-                        {item}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                          key={item}
+                          onClick={() => {
+                            if (title === "Text") {
+                              const option = textOptions.find(
+                                (candidate) => candidate.label === item,
+                              );
+                              if (option) onInsertText(option.style);
+                            } else if (title === "Shapes") {
+                              const option = SHAPE_LIBRARY.find(
+                                (candidate) => candidate.label === item,
+                              );
+                              if (option) onInsertShape(option.shapeType);
+                            } else if (title === "Artwork") {
+                              const option = ART_LIBRARY.find(
+                                (candidate) => candidate.label === item,
+                              );
+                              if (option) onInsertArtwork(option.key);
+                            }
+                          }}
+                        >
+                          <span className="flex size-6 items-center justify-center rounded-md bg-[#f3f6f2] text-[#66816d]">
+                            <InsertIcon item={item} />
+                          </span>
+                          {item}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {title === "Artwork" && (
+                  <ImageMenuButton
+                    onInsertImage={onInsertImage}
+                    open={open}
+                  />
+                )}
+              </div>
             ))}
           </div>
 
@@ -214,36 +196,125 @@ export function LeftSidebar({
         </nav>
       </SidebarContent>
 
-      <SidebarFooter
-        className={cn(
-          "border-t border-[#eef0ed] p-3 max-sm:hidden transition-all opacity-100",
-          !open && "opacity-0 bg-sidebar",
-        )}
-      >
-        <div className="rounded-xl bg-[#f6f8f5] p-3">
-          <div className="flex items-start gap-2.5">
-            <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#7a9b7e] shadow-sm">
-              <WandSparkles className="size-4" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-[#45554a]">
-                Need a little spark?
-              </p>
-              <p className="mt-1 text-[11px] leading-relaxed text-[#879189]">
-                Start with a ready-made page layout.
-              </p>
-              <Button
-                className="mt-2 h-6 px-0 text-[11px] font-semibold text-[#47704f] hover:bg-transparent hover:text-[#315d44]"
-                disabled
-                variant="ghost"
-              >
-                Browse layouts <ArrowRight className="ml-1 size-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function ImageMenuButton({
+  onInsertImage,
+  open,
+}: {
+  onInsertImage: (src: string, alt: string) => void;
+  open: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Choose a supported image file.");
+      return;
+    }
+
+    setUploadError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        setUploadError("The selected image could not be read.");
+        return;
+      }
+      onInsertImage(reader.result, file.name);
+    };
+    reader.onerror = () =>
+      setUploadError(reader.error?.message ?? "The selected image could not be read.");
+    reader.readAsDataURL(file);
+  }
+
+  function handleGenerateImage() {
+    const description = window.prompt("Describe the image you want to generate:");
+    const prompt = description?.trim();
+    if (!prompt) return;
+
+    setUploadError(null);
+    setIsGenerating(true);
+    window.setTimeout(() => {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" fill="#f3f6f2"/><rect x="20" y="20" width="472" height="472" fill="none" stroke="#66816d" stroke-width="8"/><text x="256" y="256" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="600" fill="#315d44">AI Generated</text></svg>`;
+      onInsertImage(
+        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+        `AI generated: ${prompt}`,
+      );
+      setIsGenerating(false);
+    }, 600);
+  }
+
+  return (
+    <div>
+      <input
+        accept="image/*"
+        aria-hidden="true"
+        className="sr-only"
+        onChange={handleFileChange}
+        ref={inputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <SidebarMenuButton className="h-10 w-full justify-start gap-3 px-2.5 text-[13px] font-medium text-[#46524a] hover:bg-[#f3f6f2] hover:text-[#315d44] max-sm:justify-center max-sm:px-0" />
+          }
+        >
+          <span
+            className={cn(
+              "flex size-7 items-center justify-center rounded-lg transition",
+              open && "bg-[#f3f5f2] text-[#718077]",
+            )}
+          >
+            <ImageIcon className="size-4" strokeWidth={1.8} />
+          </span>
+          <span className="flex-1 text-left max-sm:hidden">Image</span>
+          <ChevronRight className="size-3.5 text-[#9aa39d] max-sm:hidden" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-60" side="right">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="px-2 py-1.5">
+              Add image
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 px-2 py-2"
+              onClick={() => inputRef.current?.click()}
+            >
+              <span className="flex size-6 items-center justify-center rounded-md bg-[#f3f6f2] text-[#66816d]">
+                <Upload className="size-3.5" />
+              </span>
+              Upload image
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 px-2 py-2"
+              disabled={isGenerating}
+              onClick={handleGenerateImage}
+            >
+              <span className="flex size-6 items-center justify-center rounded-md bg-[#f3f6f2] text-[#66816d]">
+                <Sparkles className="size-3.5" />
+              </span>
+              {isGenerating ? "Generating..." : "Generate with AI"}
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {uploadError && (
+        <p aria-live="polite" className="px-2 py-1 text-[10px] text-red-600">
+          {uploadError}
+        </p>
+      )}
+    </div>
   );
 }
 
