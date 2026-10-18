@@ -6,33 +6,39 @@ import {
   ArrowLeft,
   ArrowUp,
   Image as ImageIcon,
-  Layers2,
   Puzzle,
   Shapes,
+  Sparkles,
   Trash2,
   Type,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Sidebar, SidebarContent } from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { useEditorContext } from "../editor-context";
-import type { EditorElement } from "./editor-types";
-import { ArtworkElementOptions } from "./artwork-element-options";
-import { ShapeElementOptions } from "./shape-element-options";
-import { TextElementOptions } from "./text-element-options";
 import { ART_LIBRARY } from "@/lib/designAssets";
+import { useEditorContext } from "../editor-context";
+import { ArtworkElementOptions } from "./artwork-element-options";
+import { ColoringPageDialog } from "./coloring-page-dialog";
+import type { EditorElement } from "./editor-types";
 import { ImageElementOptions } from "./image-element-options";
+import { MazeElementOptions } from "./maze-element-options";
+import { ShapeElementOptions } from "./shape-element-options";
 import { SudokuElementOptions } from "./sudoku-element-options";
+import { TextElementOptions } from "./text-element-options";
 import {
   WordSearchGridElementOptions,
   WordSearchWordsElementOptions,
 } from "./word-search-element-options";
-import { MazeElementOptions } from "./maze-element-options";
 
-export function RightSidebar() {
+export function RightSidebar({
+  coloringDialogOpen,
+  onColoringDialogOpenChange,
+}: {
+  coloringDialogOpen: boolean;
+  onColoringDialogOpenChange: (open: boolean) => void;
+}) {
   const editor = useEditorContext();
   const layers = [...editor.currentPage.elements].sort(
     (first, second) => second.zIndex - first.zIndex,
@@ -175,7 +181,10 @@ export function RightSidebar() {
                         editor.updateSudokuElement(selectedElement.id, updates)
                       }
                       onDifficultyChange={(difficulty) =>
-                        editor.setSudokuDifficulty(selectedElement.id, difficulty)
+                        editor.setSudokuDifficulty(
+                          selectedElement.id,
+                          difficulty,
+                        )
                       }
                     />
                   ) : selectedElement.kind === "word-search" ? (
@@ -217,13 +226,34 @@ export function RightSidebar() {
           </TabsContent>
 
           <TabsContent
-            className="m-3 rounded-lg bg-[#f7f8f6] p-4 text-[11px] leading-relaxed text-[#879189]"
+            className="m-3 space-y-3 rounded-lg bg-[#f7f8f6] p-4 text-[11px] leading-relaxed text-[#879189]"
             value="design"
           >
-            Page design controls will be available here.
+            <div>
+              <h3 className="text-xs font-semibold text-[#46534a]">
+                Coloring pages
+              </h3>
+              <p className="mt-1">
+                Create a page from your own images or preview mock AI-generated
+                ideas.
+              </p>
+            </div>
+            <Button
+              className="w-full justify-start"
+              onClick={() => onColoringDialogOpenChange(true)}
+              type="button"
+            >
+              <Sparkles />
+              Create coloring pages
+            </Button>
           </TabsContent>
         </Tabs>
       </SidebarContent>
+      <ColoringPageDialog
+        open={coloringDialogOpen}
+        onOpenChange={onColoringDialogOpenChange}
+        onAddPages={editor.addColoringPages}
+      />
     </Sidebar>
   );
 }

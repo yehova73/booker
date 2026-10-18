@@ -92,6 +92,7 @@ export function LeftSidebar({
   onGenerateSudoku,
   onGenerateWordSearch,
   onGenerateMaze,
+  onOpenColoringPage,
 }: {
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
@@ -106,6 +107,7 @@ export function LeftSidebar({
     settings: WordSearchGenerationSettings,
   ) => Promise<void>;
   onGenerateMaze: (settings: MazeGenerationSettings) => Promise<void>;
+  onOpenColoringPage: () => void;
 }) {
   const { open } = useSidebar("left");
   const [sudokuDialogOpen, setSudokuDialogOpen] = useState(false);
@@ -174,7 +176,8 @@ export function LeftSidebar({
                               title === "Puzzles" &&
                               (item === "Sudoku" ||
                                 item === "Word search" ||
-                                item === "Maze")
+                                item === "Maze" ||
+                                item === "Coloring page")
                             )
                           }
                           key={item}
@@ -209,6 +212,11 @@ export function LeftSidebar({
                               item === "Maze"
                             ) {
                               setMazeDialogOpen(true);
+                            } else if (
+                              title === "Puzzles" &&
+                              item === "Coloring page"
+                            ) {
+                              onOpenColoringPage();
                             }
                           }}
                         >

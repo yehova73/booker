@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { EditorProvider, useEditorContext } from "./editor-context";
 import { EditorHeader } from "./components/header";
@@ -21,6 +21,7 @@ export default function EditorPage() {
 
 function EditorWorkspace() {
   const editor = useEditorContext();
+  const [coloringDialogOpen, setColoringDialogOpen] = useState(false);
   const selectedElementId = editor.selectedElementId;
   const deleteElement = editor.deleteElement;
 
@@ -79,6 +80,7 @@ function EditorWorkspace() {
             onGenerateSudoku={editor.addSudokuPages}
             onGenerateWordSearch={editor.addWordSearchPages}
             onGenerateMaze={editor.addMazePages}
+            onOpenColoringPage={() => setColoringDialogOpen(true)}
           />
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-[#f5f6f3]">
             <div className="flex min-h-0 flex-1">
@@ -98,7 +100,10 @@ function EditorWorkspace() {
               />
             </div>
           </SidebarInset>
-          <RightSidebar />
+          <RightSidebar
+            coloringDialogOpen={coloringDialogOpen}
+            onColoringDialogOpenChange={setColoringDialogOpen}
+          />
         </div>
         <PagesFooter
           pages={editor.pages}

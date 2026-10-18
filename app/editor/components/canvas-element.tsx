@@ -439,13 +439,14 @@ function FutureElement({
       >
         <Image
           alt={element.alt}
-          className="pointer-events-none select-none object-cover"
+          className="pointer-events-none select-none"
           draggable={false}
           fill
           sizes="100vw"
           src={element.src}
           style={{
             filter: buildImageFilter(element.filters),
+            objectFit: element.objectFit ?? "cover",
             opacity: element.opacity / 100,
           }}
           unoptimized

@@ -12,6 +12,7 @@ import {
 import type {
   EditorElement,
   EditorPage,
+  ColoringPageImage,
   ArtworkElementUpdates,
   ImageEditorElement,
   ImageElementUpdates,
@@ -179,6 +180,7 @@ type EditorContextValue = EditorDocument & {
   deletePage: (pageId: string) => void;
   addTextElement: (textStyle: TextStyle) => void;
   addImageElement: (src: string, alt: string) => void;
+  addColoringPages: (images: ColoringPageImage[]) => void;
   addShapeElement: (shapeType: ShapeType) => void;
   addArtworkElement: (artKey: string) => void;
   addSudokuPages: (
@@ -417,6 +419,51 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           ),
         });
         selectElement(element.id);
+      },
+      addColoringPages: (images) => {
+        if (images.length < 1 || images.length > 50) {
+          throw new Error("Add between 1 and 50 coloring page images.");
+        }
+
+        const pages: EditorPage[] = images.map((image, index) => {
+          const title = `Coloring page ${index + 1}`;
+          const element: ImageEditorElement = {
+            id: crypto.randomUUID(),
+            kind: "image",
+            src: image.src,
+            alt: image.alt || title,
+            objectFit: "contain",
+            borderColor: "#1e293b",
+            borderWidth: 0,
+            borderRadius: 0,
+            opacity: 100,
+            rotation: 0,
+            filters: {
+              ...defaultImageFilters,
+              brightness: 120,
+              contrast: 180,
+              grayscale: 100,
+            },
+            x: 8,
+            y: 8,
+            width: 84,
+            height: 84,
+            zIndex: 0,
+          };
+
+          return {
+            id: crypto.randomUUID(),
+            title,
+            elements: [element],
+          };
+        });
+
+        saveDocument({
+          ...document,
+          pages: [...document.pages, ...pages],
+          currentPageId: pages[0].id,
+        });
+        selectElement(null);
       },
       addShapeElement: (shapeType) => {
         const topLayer = Math.max(
@@ -1397,6 +1444,7 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
       kind: "image",
       src: value.src,
       alt: value.alt,
+      objectFit: value.objectFit === "contain" ? "contain" : "cover",
       width: Math.max(0.1, value.width),
       height: Math.max(0.1, value.height),
       borderColor: isHexColor(value.borderColor)

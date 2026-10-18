@@ -97,12 +97,18 @@ export type ImageEditorElement = ElementPosition & {
   kind: "image";
   src: string;
   alt: string;
+  objectFit?: "cover" | "contain";
   borderColor: string;
   borderWidth: number;
   borderRadius: number;
   opacity: number;
   rotation: number;
   filters: ImageFilterSettings;
+};
+
+export type ColoringPageImage = {
+  src: string;
+  alt: string;
 };
 
 export type SudokuEditorElement = ElementPosition & {
