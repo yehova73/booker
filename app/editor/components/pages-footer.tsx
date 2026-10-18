@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { FileCheck2, Plus } from "lucide-react";
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
@@ -14,6 +14,7 @@ type PagesFooterProps = {
   onAddPage: () => void;
   onClonePage: (pageId: string) => void;
   onDeletePage: (pageId: string) => void;
+  onGenerateSolutions: () => void;
 };
 
 export function PagesFooter({
@@ -23,7 +24,14 @@ export function PagesFooter({
   onAddPage,
   onClonePage,
   onDeletePage,
+  onGenerateSolutions,
 }: PagesFooterProps) {
+  const hasSudoku = pages.some((page) =>
+    page.elements.some(
+      (element) => element.kind === "sudoku" && !element.isSolution,
+    ),
+  );
+
   return (
     <footer className="h-[124px] shrink-0 border-t border-[#e2e7e2] bg-white px-5">
       {/* <div className="mb-1.5 flex items-center justify-between">
@@ -44,6 +52,19 @@ export function PagesFooter({
 
       <ScrollArea className="h-full w-full overflow-y-hidden">
         <div className="flex w-max min-w-full items-start overflow-y-hidden gap-3 pb-2 py-2">
+          {hasSudoku && (
+            <button
+              aria-label="Generate solutions"
+              className="flex h-[84px] w-[78px] cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-[#e2e7e2] transition hover:border-[#6b9076]"
+              onClick={onGenerateSolutions}
+              type="button"
+            >
+              <FileCheck2 className="size-4 text-[#6b9076]" />
+              <span className="text-center text-[10px] leading-tight text-[#929b94]">
+                Generate solutions
+              </span>
+            </button>
+          )}
           <button
             aria-label={`Blank Page`}
             className=" flex w-[68px] flex-col items-center justify-center gap-1 rounded-md h-[84px] border border-dashed border-[#e2e7e2] hover:border-[#6b9076] cursor-pointer transition"

@@ -25,6 +25,7 @@ import { ShapeElementOptions } from "./shape-element-options";
 import { TextElementOptions } from "./text-element-options";
 import { ART_LIBRARY } from "@/lib/designAssets";
 import { ImageElementOptions } from "./image-element-options";
+import { SudokuElementOptions } from "./sudoku-element-options";
 
 export function RightSidebar() {
   const editor = useEditorContext();
@@ -161,6 +162,17 @@ export function RightSidebar() {
                         editor.updateImageElement(selectedElement.id, updates)
                       }
                     />
+                  ) : selectedElement.kind === "sudoku" ? (
+                    <SudokuElementOptions
+                      element={selectedElement}
+                      trimPreset={editor.trimPreset}
+                      onChange={(updates) =>
+                        editor.updateSudokuElement(selectedElement.id, updates)
+                      }
+                      onDifficultyChange={(difficulty) =>
+                        editor.setSudokuDifficulty(selectedElement.id, difficulty)
+                      }
+                    />
                   ) : (
                     <p className="text-[11px] text-[#909991]">
                       Options for this element are coming soon.
@@ -207,7 +219,7 @@ function LayerRow({
       ? Type
       : element.kind === "image"
         ? ImageIcon
-        : element.kind === "puzzle"
+        : element.kind === "puzzle" || element.kind === "sudoku"
           ? Puzzle
           : element.kind === "artwork"
             ? ImageIcon
@@ -272,6 +284,7 @@ function elementLabel(element: EditorElement) {
   }
   if (element.kind === "image") return element.alt || "Image";
   if (element.kind === "puzzle") return element.puzzleType;
+  if (element.kind === "sudoku") return "Sudoku";
   if (element.kind === "artwork") {
     return (
       ART_LIBRARY.find((artwork) => artwork.key === element.artKey)?.label ??

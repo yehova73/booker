@@ -33,8 +33,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import type { ShapeType, TextStyle } from "./editor-types";
+import type {
+  ShapeType,
+  SudokuDifficulty,
+  TextStyle,
+} from "./editor-types";
 import { ART_LIBRARY, SHAPE_LIBRARY } from "@/lib/designAssets";
+import { SudokuGeneratorDialog } from "./sudoku-generator-dialog";
 
 const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Paragraph", style: "paragraph" },
@@ -80,13 +85,20 @@ export function LeftSidebar({
   onInsertShape,
   onInsertArtwork,
   onInsertImage,
+  onGenerateSudoku,
 }: {
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
   onInsertArtwork: (artKey: string) => void;
   onInsertImage: (src: string, alt: string) => void;
+  onGenerateSudoku: (
+    squares: 2 | 3 | 4 | 5,
+    difficulty: SudokuDifficulty,
+    pageCount: number,
+  ) => Promise<void>;
 }) {
   const { open } = useSidebar("left");
+  const [sudokuDialogOpen, setSudokuDialogOpen] = useState(false);
   return (
     <Sidebar
       aria-label="Book content"
@@ -132,7 +144,9 @@ export function LeftSidebar({
                             ? "Add shape"
                             : title === "Artwork"
                               ? "Add artwork"
-                              : "Coming soon"}
+                                  : title === "Puzzles"
+                                    ? "Add puzzle"
+                                  : "Coming soon"}
                       </DropdownMenuLabel>
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator />
@@ -143,7 +157,8 @@ export function LeftSidebar({
                           disabled={
                             title !== "Text" &&
                             title !== "Shapes" &&
-                            title !== "Artwork"
+                            title !== "Artwork" &&
+                            !(title === "Puzzles" && item === "Sudoku")
                           }
                           key={item}
                           onClick={() => {
@@ -162,6 +177,11 @@ export function LeftSidebar({
                                 (candidate) => candidate.label === item,
                               );
                               if (option) onInsertArtwork(option.key);
+                            } else if (
+                              title === "Puzzles" &&
+                              item === "Sudoku"
+                            ) {
+                              setSudokuDialogOpen(true);
                             }
                           }}
                         >
@@ -195,7 +215,11 @@ export function LeftSidebar({
           </div>
         </nav>
       </SidebarContent>
-
+      <SudokuGeneratorDialog
+        open={sudokuDialogOpen}
+        onOpenChange={setSudokuDialogOpen}
+        onGenerate={onGenerateSudoku}
+      />
     </Sidebar>
   );
 }

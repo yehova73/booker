@@ -121,7 +121,9 @@ export function CanvasElement({
   });
   const textRef = useRef<HTMLDivElement>(null);
   const editStartContent = useRef("");
-  const latestRotation = useRef(element.kind !== "puzzle" ? element.rotation : 0);
+  const latestRotation = useRef(
+    "rotation" in element ? element.rotation : 0,
+  );
 
   useEffect(() => {
     if (editing && textRef.current) {
@@ -161,7 +163,7 @@ export function CanvasElement({
       event.clientY - centerY,
       event.clientX - centerX,
     );
-    const rotation = element.kind !== "puzzle" ? element.rotation : 0;
+    const rotation = "rotation" in element ? element.rotation : 0;
     dragStart.current = {
       x: visibleGeometry.x,
       y: visibleGeometry.y,
@@ -257,6 +259,8 @@ export function CanvasElement({
           ? `${element.textStyle} text`
           : element.kind === "shape"
             ? element.shapeType
+            : element.kind === "sudoku"
+              ? "Sudoku puzzle"
             : element.kind
       }
       className={`absolute z-10 touch-none rounded-sm ${
@@ -339,7 +343,8 @@ export function CanvasElement({
         (element.kind === "text" ||
           element.kind === "shape" ||
           element.kind === "artwork" ||
-        element.kind === "image") &&
+          element.kind === "image" ||
+          element.kind === "sudoku") &&
       overlayTarget &&
       createPortal(
         <div
@@ -353,21 +358,26 @@ export function CanvasElement({
             top: `${visibleGeometry.y}%`,
             width: `${visibleGeometry.width}%`,
             height: `${visibleGeometry.height}%`,
-            transform: `rotate(${previewRotation ?? element.rotation}deg)`,
+            transform:
+              "rotation" in element
+                ? `rotate(${previewRotation ?? element.rotation}deg)`
+                : undefined,
             transformOrigin: "center",
           }}
         >
           <div className="absolute inset-0 rounded-sm outline outline-1 outline-[#6d9875] outline-offset-2" />
           <div className="absolute bottom-full left-1/2 h-5 -translate-x-1/2 border-l border-[#6d9875]" />
-          <button
-            aria-label={`Rotate ${element.kind}`}
-            className="pointer-events-auto absolute -top-10 left-1/2 flex size-6 -translate-x-1/2 items-center justify-center rounded-full border border-white bg-[#5d8866] text-white shadow"
-            data-rotation-handle
-            style={{ cursor: "grab" }}
-            type="button"
-          >
-            <RotateCw aria-hidden="true" className="size-3.5" />
-          </button>
+          {"rotation" in element && (
+            <button
+              aria-label={`Rotate ${element.kind}`}
+              className="pointer-events-auto absolute -top-10 left-1/2 flex size-6 -translate-x-1/2 items-center justify-center rounded-full border border-white bg-[#5d8866] text-white shadow"
+              data-rotation-handle
+              style={{ cursor: "grab" }}
+              type="button"
+            >
+              <RotateCw aria-hidden="true" className="size-3.5" />
+            </button>
+          )}
           {resizeHandles
             .filter(
               (handle) =>
@@ -437,6 +447,9 @@ function FutureElement({
       </div>
     );
   }
+  if (element.kind === "sudoku") {
+    return <SudokuGraphic element={element} />;
+  }
   if (element.kind === "artwork") {
     const src = getArtSvgDataUri(
       element.artKey,
@@ -454,6 +467,65 @@ function FutureElement({
     ) : null;
   }
   return <ShapeGraphic element={element} />;
+}
+
+function SudokuGraphic({
+  element,
+}: {
+  element: Extract<EditorElement, { kind: "sudoku" }>;
+}) {
+  const sideLength = element.squares * element.squares;
+
+  return (
+    <div className="flex size-full items-center justify-center">
+      <div className="flex h-full w-full flex-col items-center justify-center">
+        {element.isSolution && element.solutionNumber && (
+          <span className="shrink-0 text-[10px] font-medium text-[#68736b]">
+            Solution {element.solutionNumber}
+          </span>
+        )}
+        <div
+          className="grid aspect-square w-full max-h-full max-w-full"
+          style={{
+            gridTemplateColumns: `repeat(${sideLength}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${sideLength}, minmax(0, 1fr))`,
+          }}
+        >
+          {element.puzzle.map((value, index) => {
+            const row = Math.floor(index / sideLength);
+            const column = index % sideLength;
+            const borderTopWidth =
+              row === 0 ? 4 : row % element.squares === 0 ? 4 : 1;
+            const borderLeftWidth =
+              column === 0 ? 4 : column % element.squares === 0 ? 4 : 1;
+            const borderRight = column === sideLength - 1;
+            const borderBottom = row === sideLength - 1;
+
+            return (
+              <span
+                className="flex min-w-0 items-center justify-center leading-none"
+                key={`${row}-${column}`}
+                style={{
+                  borderTop: `${borderTopWidth}px solid ${element.color}`,
+                  borderLeft: `${borderLeftWidth}px solid ${element.color}`,
+                  borderRight: borderRight
+                    ? `4px solid ${element.color}`
+                    : undefined,
+                  borderBottom: borderBottom
+                    ? `4px solid ${element.color}`
+                    : undefined,
+                  color: element.color,
+                  fontSize: `${element.numberSize}px`,
+                }}
+              >
+                {value === -1 ? "" : value + 1}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

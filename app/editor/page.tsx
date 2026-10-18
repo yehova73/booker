@@ -76,6 +76,7 @@ function EditorWorkspace() {
             onInsertShape={editor.addShapeElement}
             onInsertArtwork={editor.addArtworkElement}
             onInsertImage={editor.addImageElement}
+            onGenerateSudoku={editor.addSudokuPages}
           />
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-[#f5f6f3]">
             <div className="flex min-h-0 flex-1">
@@ -104,6 +105,7 @@ function EditorWorkspace() {
           onAddPage={editor.addBlankPage}
           onClonePage={editor.clonePage}
           onDeletePage={editor.deletePage}
+          onGenerateSolutions={editor.generateSudokuSolutions}
         />
       </SidebarProvider>
     </TooltipProvider>

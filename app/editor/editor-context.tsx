@@ -23,6 +23,9 @@ import type {
   ShapeElementUpdates,
   ShapeType,
   SpreadMode,
+  SudokuDifficulty,
+  SudokuEditorElement,
+  SudokuElementUpdates,
   TextEditorElement,
   TextElementUpdates,
   TextStyle,
@@ -30,6 +33,11 @@ import type {
   ZoomLevel,
 } from "./components/editor-types";
 import { ART_LIBRARY, SHAPE_TYPES } from "@/lib/designAssets";
+import {
+  generateSudokus,
+  isSudokuDifficulty,
+  updateSudokuDifficulty,
+} from "./sudoku-utils";
 
 const storageKey = "booker-editor-document";
 const defaultImageFilters: ImageFilterSettings = {
@@ -158,6 +166,12 @@ type EditorContextValue = EditorDocument & {
   addImageElement: (src: string, alt: string) => void;
   addShapeElement: (shapeType: ShapeType) => void;
   addArtworkElement: (artKey: string) => void;
+  addSudokuPages: (
+    squares: 2 | 3 | 4 | 5,
+    difficulty: SudokuDifficulty,
+    pageCount: number,
+  ) => Promise<void>;
+  generateSudokuSolutions: () => void;
   deleteElement: (elementId: string) => void;
   updateTextContent: (elementId: string, content: string) => void;
   updateTextElement: (elementId: string, updates: TextElementUpdates) => void;
@@ -169,6 +183,14 @@ type EditorContextValue = EditorDocument & {
   updateImageElement: (
     elementId: string,
     updates: ImageElementUpdates,
+  ) => void;
+  updateSudokuElement: (
+    elementId: string,
+    updates: SudokuElementUpdates,
+  ) => void;
+  setSudokuDifficulty: (
+    elementId: string,
+    difficulty: SudokuDifficulty,
   ) => void;
   moveElement: (elementId: string, position: { x: number; y: number }) => void;
   rotateElement: (elementId: string, rotation: number) => void;
@@ -434,6 +456,93 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         });
         selectElement(element.id);
       },
+      addSudokuPages: async (squares, difficulty, pageCount) => {
+        if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) {
+          throw new Error("Sudoku page count must be between 1 and 50.");
+        }
+
+        const generated = await generateSudokus(squares, difficulty, pageCount);
+        const latestDocument = parseDocument(
+          JSON.parse(getSnapshot()) as StorageSnapshot,
+        ).document;
+        const pages = generated.map((data, index) => {
+          const element: SudokuEditorElement = {
+            id: crypto.randomUUID(),
+            kind: "sudoku",
+            squares,
+            difficulty,
+            ...data,
+            color: "#2b4736",
+            numberSize: defaultSudokuNumberSize(squares),
+            isSolution: false,
+            x: 14,
+            y: 12,
+            width: 72,
+            height: 68,
+            zIndex: 0,
+          };
+          return {
+            id: crypto.randomUUID(),
+            title: `Sudoku ${index + 1}`,
+            elements: [element],
+          };
+        });
+        const nextPages = [...latestDocument.pages, ...pages];
+
+        saveDocument({
+          ...latestDocument,
+          pages: nextPages,
+          currentPageId: pages[0].id,
+        });
+        selectElement(null);
+      },
+      generateSudokuSolutions: () => {
+        const puzzles = document.pages.flatMap((page) =>
+          page.pageType === "sudoku-solutions"
+            ? []
+            : page.elements.filter(
+                (element): element is SudokuEditorElement =>
+                  element.kind === "sudoku" && !element.isSolution,
+              ),
+        );
+        if (puzzles.length === 0) return;
+
+        const solutionElements = puzzles.map((element, index) => ({
+          ...element,
+          id: crypto.randomUUID(),
+          puzzle: [...element.solution],
+          hiddenSquares: 0,
+          isSolution: true,
+          solutionNumber: index + 1,
+          x: 7 + (index % 2) * 46,
+          y: 7 + (Math.floor(index / 2) % 2) * 46,
+          width: 40,
+          height: 40,
+          zIndex: 0,
+        }));
+        const solutionPages = Array.from(
+          { length: Math.ceil(solutionElements.length / 4) },
+          (_, pageIndex) => ({
+            id: crypto.randomUUID(),
+            title: `Sudoku solutions ${pageIndex + 1}`,
+            pageType: "sudoku-solutions" as const,
+            elements: solutionElements.slice(pageIndex * 4, pageIndex * 4 + 4),
+          }),
+        );
+        const pages = [
+          ...document.pages.filter(
+            (page) => page.pageType !== "sudoku-solutions",
+          ),
+          ...solutionPages,
+        ];
+
+        saveDocument({
+          ...document,
+          pages,
+          currentPageId: solutionPages[0].id,
+        });
+        selectElement(null);
+      },
       deleteElement: (elementId) => {
         if (!currentPage.elements.some((element) => element.id === elementId))
           return;
@@ -536,6 +645,67 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                   filters: normalizeImageFilters(updated.filters),
                 };
               }),
+          ),
+        });
+      },
+      updateSudokuElement: (elementId, updates) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) => {
+                if (element.id !== elementId || element.kind !== "sudoku")
+                  return element;
+                const updated = { ...element, ...updates };
+                return {
+                  ...updated,
+                  x: clamp(updated.x, 0, 100),
+                  y: clamp(updated.y, 0, 100),
+                  width: Math.max(0.1, updated.width),
+                  height: Math.max(0.1, updated.height),
+                  color: isHexColor(updated.color)
+                    ? updated.color
+                    : "#2b4736",
+                  numberSize: clamp(updated.numberSize, 4, 48),
+                };
+              }),
+          ),
+        });
+      },
+      setSudokuDifficulty: (elementId, difficulty) => {
+        const element = currentPage.elements.find(
+          (candidate): candidate is SudokuEditorElement =>
+            candidate.id === elementId && candidate.kind === "sudoku",
+        );
+        if (!element || element.difficulty === difficulty) return;
+        const data = updateSudokuDifficulty(
+          element.puzzle,
+          element.solution,
+          difficulty,
+        );
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((candidate) =>
+                candidate.id === elementId && candidate.kind === "sudoku"
+                  ? {
+                      ...candidate,
+                      difficulty,
+                      ...data,
+                      puzzle: candidate.isSolution
+                        ? [...candidate.solution]
+                        : data.puzzle,
+                      hiddenSquares: candidate.isSolution
+                        ? 0
+                        : data.hiddenSquares,
+                    }
+                  : candidate,
+              ),
           ),
         });
       },
@@ -770,6 +940,9 @@ function normalizeDocument(value: unknown): EditorDocument | null {
         typeof pageValue.title === "string"
           ? pageValue.title
           : `Page ${pageIndex + 1}`,
+      ...(pageValue.pageType === "sudoku-solutions"
+        ? { pageType: pageValue.pageType }
+        : {}),
       elements,
     });
   }
@@ -891,6 +1064,46 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
   if (value.kind === "puzzle" && typeof value.puzzleType === "string") {
     return { ...position, kind: "puzzle", puzzleType: value.puzzleType };
   }
+  if (value.kind === "sudoku") {
+    const squares = value.squares;
+    const solutionNumber = value.solutionNumber;
+    if (
+      squares !== 2 &&
+      squares !== 3 &&
+      squares !== 4 &&
+      squares !== 5
+    ) {
+      return null;
+    }
+    const sideLength = squares * squares;
+    const boardLength = sideLength * sideLength;
+    if (
+      !isSudokuDifficulty(value.difficulty) ||
+      !isSudokuBoard(value.puzzle, boardLength, true) ||
+      !isSudokuBoard(value.solution, boardLength, false)
+    ) {
+      return null;
+    }
+    return {
+      ...position,
+      kind: "sudoku",
+      squares,
+      difficulty: value.difficulty,
+      puzzle: value.puzzle,
+      solution: value.solution,
+      hiddenSquares: value.puzzle.filter((cell) => cell === -1).length,
+      color: isHexColor(value.color) ? value.color : "#2b4736",
+      numberSize: isFiniteNumber(value.numberSize)
+        ? clamp(value.numberSize, 4, 48)
+        : defaultSudokuNumberSize(squares),
+      isSolution: value.isSolution === true,
+      ...(typeof solutionNumber === "number" &&
+      Number.isInteger(solutionNumber) &&
+      solutionNumber > 0
+        ? { solutionNumber }
+        : {}),
+    };
+  }
   if (value.kind === "artwork" && isArtKey(value.artKey)) {
     return {
       ...position,
@@ -1007,6 +1220,7 @@ function isEditorPage(value: unknown): value is EditorPage {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.title === "string" &&
+    (value.pageType === undefined || value.pageType === "sudoku-solutions") &&
     Array.isArray(value.elements) &&
     value.elements.every(isEditorElement)
   );
@@ -1059,6 +1273,33 @@ function isEditorElement(value: unknown): value is EditorElement {
     );
   }
   if (value.kind === "puzzle") return typeof value.puzzleType === "string";
+  if (value.kind === "sudoku") {
+    const squares = value.squares;
+    const solutionNumber = value.solutionNumber;
+    if (
+      squares !== 2 &&
+      squares !== 3 &&
+      squares !== 4 &&
+      squares !== 5
+    ) {
+      return false;
+    }
+    const sideLength = squares * squares;
+    const boardLength = sideLength * sideLength;
+    return (
+      isSudokuDifficulty(value.difficulty) &&
+      isSudokuBoard(value.puzzle, boardLength, true) &&
+      isSudokuBoard(value.solution, boardLength, false) &&
+      isFiniteNumber(value.hiddenSquares) &&
+      isHexColor(value.color) &&
+      isFiniteNumber(value.numberSize) &&
+      typeof value.isSolution === "boolean" &&
+      (solutionNumber === undefined ||
+        (typeof solutionNumber === "number" &&
+          Number.isInteger(solutionNumber) &&
+          solutionNumber > 0))
+    );
+  }
   if (value.kind === "artwork") {
     return (
       isArtKey(value.artKey) &&
@@ -1082,6 +1323,23 @@ function isEditorElement(value: unknown): value is EditorElement {
     );
   }
   return false;
+}
+
+function isSudokuBoard(
+  value: unknown,
+  boardLength: number,
+  allowEmpty: boolean,
+): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length === boardLength &&
+    value.every(
+      (cell) =>
+        Number.isInteger(cell) &&
+        (allowEmpty ? cell >= -1 : cell >= 0) &&
+        cell < Math.sqrt(boardLength),
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1184,6 +1442,10 @@ function isHexColor(value: unknown): value is string {
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function defaultSudokuNumberSize(squares: 2 | 3 | 4 | 5) {
+  return clamp(Math.floor(112 / (squares * squares)), 6, 14);
 }
 
 function errorMessage(error: unknown) {

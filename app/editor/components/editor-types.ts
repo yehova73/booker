@@ -2,6 +2,7 @@ export type TrimPreset = "letter" | "paperback" | "square";
 export type ZoomLevel = "50%" | "75%" | "100%" | "Fit";
 export type SpreadMode = "single" | "spread";
 export type SaveStatus = "loading" | "saved" | "error";
+export type SudokuDifficulty = "easy" | "medium" | "hard" | "insane";
 export type TextFontFamily = "serif" | "sans" | "mono";
 export type TextAlignment = "left" | "center" | "right" | "justify";
 export type TextStyle =
@@ -103,6 +104,19 @@ export type ImageEditorElement = ElementPosition & {
   filters: ImageFilterSettings;
 };
 
+export type SudokuEditorElement = ElementPosition & {
+  kind: "sudoku";
+  squares: 2 | 3 | 4 | 5;
+  difficulty: SudokuDifficulty;
+  puzzle: number[];
+  solution: number[];
+  hiddenSquares: number;
+  color: string;
+  numberSize: number;
+  isSolution: boolean;
+  solutionNumber?: number;
+};
+
 export type TextElementUpdates = Partial<
   Pick<
     TextEditorElement,
@@ -158,9 +172,17 @@ export type ImageElementUpdates = Partial<
   >
 >;
 
+export type SudokuElementUpdates = Partial<
+  Pick<
+    SudokuEditorElement,
+    "x" | "y" | "width" | "height" | "color" | "numberSize"
+  >
+>;
+
 export type EditorElement =
   | TextEditorElement
   | ImageEditorElement
+  | SudokuEditorElement
   | (ElementPosition & {
       kind: "puzzle";
       puzzleType: string;
@@ -171,5 +193,6 @@ export type EditorElement =
 export type EditorPage = {
   id: string;
   title: string;
+  pageType?: "sudoku-solutions";
   elements: EditorElement[];
 };

@@ -52,7 +52,9 @@ export function PageThumbnail({
                       ? "absolute block overflow-hidden"
                       : element.kind === "artwork"
                         ? "absolute block"
-                        : "absolute block rounded-[1px] bg-[#dce6d8]"
+                            : element.kind === "sudoku"
+                              ? "absolute grid overflow-hidden"
+                            : "absolute block rounded-[1px] bg-[#dce6d8]"
               }
               key={element.id}
               style={{
@@ -64,6 +66,12 @@ export function PageThumbnail({
                     ? "5px"
                     : `${Math.max(4, element.height)}%`,
                 fontSize: "3px",
+                ...(element.kind === "sudoku"
+                  ? {
+                      gridTemplateColumns: `repeat(${element.squares * element.squares}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${element.squares * element.squares}, minmax(0, 1fr))`,
+                    }
+                  : {}),
                 transform:
                   element.kind === "shape" || element.kind === "artwork"
                     || element.kind === "image"
@@ -105,6 +113,40 @@ export function PageThumbnail({
                     ) ?? undefined
                   }
                 />
+              ) : element.kind === "sudoku" ? (
+                element.puzzle.map((value, index) => {
+                  const sideLength = element.squares * element.squares;
+                  const row = Math.floor(index / sideLength);
+                  const column = index % sideLength;
+                  return (
+                    <span
+                      className="flex items-center justify-center overflow-hidden leading-none"
+                      key={`${row}-${column}`}
+                      style={{
+                        borderTop:
+                          row === 0 || row % element.squares === 0
+                            ? `0.75px solid ${element.color}`
+                            : undefined,
+                        borderLeft:
+                          column === 0 || column % element.squares === 0
+                            ? `0.75px solid ${element.color}`
+                            : undefined,
+                        borderRight:
+                          column === sideLength - 1
+                            ? `1px solid ${element.color}`
+                            : undefined,
+                        borderBottom:
+                          row === sideLength - 1
+                            ? `1px solid ${element.color}`
+                            : undefined,
+                        color: element.color,
+                        fontSize: "2px",
+                      }}
+                    >
+                      {value === -1 ? "" : value + 1}
+                    </span>
+                  );
+                })
               ) : null}
             </span>
           ))}
