@@ -13,6 +13,10 @@ import Image from "next/image";
 
 import type { EditorElement, TextFontFamily, TextStyle } from "./editor-types";
 import { ShapeGraphic } from "./shape-graphic";
+import {
+  getWordSearchSolutionCellBackground,
+  getWordSearchSolutionCellColors,
+} from "./word-search-colors";
 import { getArtSvgDataUri } from "@/lib/designAssets";
 import { buildImageFilter } from "./image-filters";
 
@@ -545,11 +549,7 @@ function WordSearchGraphic({
 }: {
   element: Extract<EditorElement, { kind: "word-search" }>;
 }) {
-  const solutionCells = new Set(
-    element.words.flatMap((word) =>
-      word.path.map(({ x, y }) => `${x}-${y}`),
-    ),
-  );
+  const solutionCells = getWordSearchSolutionCellColors(element.words);
 
   return (
     <div className="relative flex size-full items-center justify-center overflow-hidden p-1">
@@ -569,7 +569,7 @@ function WordSearchGraphic({
       >
         {element.grid.flatMap((row, rowIndex) =>
           row.map((letter, columnIndex) => {
-            const isSolutionCell = solutionCells.has(
+            const solutionCellColor = solutionCells.get(
               `${columnIndex}-${rowIndex}`,
             );
             const outerRight = columnIndex === element.cols - 1;
@@ -589,11 +589,15 @@ function WordSearchGraphic({
                   borderBottom: outerBottom
                     ? `${element.lineWeight}px solid ${element.color}`
                     : undefined,
-                  backgroundColor:
-                    element.isSolution && isSolutionCell
-                      ? `${element.color}22`
+                  background:
+                    element.isSolution
+                      ? getWordSearchSolutionCellBackground(solutionCellColor) ??
+                        "#fffefa"
                       : "#fffefa",
-                  color: element.color,
+                  color:
+                    element.isSolution && solutionCellColor
+                      ? "#ffffff"
+                      : element.color,
                   fontSize: `${element.letterSize}px`,
                 }}
               >
@@ -630,7 +634,16 @@ function WordSearchWordsGraphic({
         </span>
       )}
       {element.words.map((word) => (
-        <span className="whitespace-nowrap" key={word.clean}>
+        <span
+          className="whitespace-nowrap"
+          key={word.clean}
+          style={{
+            color:
+              element.isSolution && word.solutionColor
+                ? word.solutionColor
+                : element.color,
+          }}
+        >
           {word.word}
         </span>
       ))}

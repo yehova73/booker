@@ -45,6 +45,7 @@ import {
   updateSudokuDifficulty,
 } from "./sudoku-utils";
 import { generateWordSearches } from "./word-search-utils";
+import { withWordSearchSolutionColors } from "./components/word-search-colors";
 
 const storageKey = "booker-editor-document";
 const defaultImageFilters: ImageFilterSettings = {
@@ -645,6 +646,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
               ...element,
               id: crypto.randomUUID(),
               puzzleId: solutionPuzzleId,
+              words: withWordSearchSolutionColors(element.words),
               isSolution: true,
               solutionNumber: index + 1,
               x: 12,
@@ -657,7 +659,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
               id: crypto.randomUUID(),
               kind: "word-search-words",
               puzzleId: solutionPuzzleId,
-              words: element.words,
+              words: solutionGrid.words,
               color: element.color,
               fontFamily: sourceWordList?.fontFamily ?? "sans",
               fontSize: sourceWordList?.fontSize ?? 12,
@@ -1600,6 +1602,8 @@ function isWordSearchPlacements(
         placement.word.length > 0 &&
         typeof placement.clean === "string" &&
         placement.clean.length > 0 &&
+        (placement.solutionColor === undefined ||
+          isHexColor(placement.solutionColor)) &&
         Array.isArray(placement.path) &&
         placement.path.length === placement.clean.length &&
         placement.path.every(

@@ -121,6 +121,7 @@ export type WordSearchPlacement = {
   word: string;
   clean: string;
   path: { x: number; y: number }[];
+  solutionColor?: string;
 };
 
 export type WordSearchGenerationSettings = {

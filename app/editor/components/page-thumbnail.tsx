@@ -2,8 +2,12 @@
 
 import { CopyPlus, Trash2 } from "lucide-react";
 
-import type { EditorPage } from "./editor-types";
+import type { EditorElement, EditorPage } from "./editor-types";
 import { ShapeGraphic } from "./shape-graphic";
+import {
+  getWordSearchSolutionCellBackground,
+  getWordSearchSolutionCellColors,
+} from "./word-search-colors";
 import { getArtSvgDataUri } from "@/lib/designAssets";
 import { buildImageFilter } from "./image-filters";
 
@@ -24,6 +28,18 @@ export function PageThumbnail({
   onDelete: () => void;
   canDelete: boolean;
 }) {
+  const wordSearchSolutionColors = new Map(
+    page.elements
+      .filter(
+        (element): element is Extract<EditorElement, { kind: "word-search" }> =>
+          element.kind === "word-search" && element.isSolution,
+      )
+      .map((element) => [
+        element.id,
+        getWordSearchSolutionCellColors(element.words),
+      ]),
+  );
+
   return (
     <div className="group relative w-[68px] shrink-0 transition-transform duration-150 hover:-translate-y-0.5">
       <button
@@ -169,14 +185,9 @@ export function PageThumbnail({
               ) : element.kind === "word-search" ? (
                 element.grid.flatMap((row, rowIndex) =>
                   row.map((letter, columnIndex) => {
-                    const isSolutionCell =
-                      element.isSolution &&
-                      element.words.some((word) =>
-                        word.path.some(
-                          (point) =>
-                            point.x === columnIndex && point.y === rowIndex,
-                        ),
-                      );
+                    const solutionCellColor = wordSearchSolutionColors
+                      .get(element.id)
+                      ?.get(`${columnIndex}-${rowIndex}`);
                     return (
                       <span
                         className="flex items-center justify-center overflow-hidden leading-none"
@@ -192,10 +203,14 @@ export function PageThumbnail({
                             rowIndex === element.rows - 1
                               ? `${Math.min(1, element.lineWeight / 4)}px solid ${element.color}`
                               : undefined,
-                          backgroundColor: isSolutionCell
-                            ? `${element.color}22`
-                            : undefined,
-                          color: element.color,
+                          background:
+                            getWordSearchSolutionCellBackground(
+                              solutionCellColor,
+                            ),
+                          color:
+                            element.isSolution && solutionCellColor
+                              ? "#ffffff"
+                              : element.color,
                           fontSize: `${Math.min(3, element.letterSize / 6)}px`,
                         }}
                       >
@@ -206,7 +221,7 @@ export function PageThumbnail({
                 )
               ) : element.kind === "word-search-words" ? (
                 <span
-                  className="overflow-hidden"
+                  className="flex flex-wrap gap-px overflow-hidden"
                   style={{
                     color: element.color,
                     fontFamily:
@@ -217,7 +232,19 @@ export function PageThumbnail({
                           : "Arial, sans-serif",
                   }}
                 >
-                  {element.words.map((word) => word.word).join(" ")}
+                  {element.words.map((word) => (
+                    <span
+                      key={word.clean}
+                      style={{
+                        color:
+                          element.isSolution && word.solutionColor
+                            ? word.solutionColor
+                            : element.color,
+                      }}
+                    >
+                      {word.word}
+                    </span>
+                  ))}
                 </span>
               ) : null}
             </span>
