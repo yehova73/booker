@@ -30,6 +30,7 @@ import {
   WordSearchGridElementOptions,
   WordSearchWordsElementOptions,
 } from "./word-search-element-options";
+import { MazeElementOptions } from "./maze-element-options";
 
 export function RightSidebar() {
   const editor = useEditorContext();
@@ -197,6 +198,14 @@ export function RightSidebar() {
                         )
                       }
                     />
+                  ) : selectedElement.kind === "maze" ? (
+                    <MazeElementOptions
+                      element={selectedElement}
+                      trimPreset={editor.trimPreset}
+                      onChange={(updates) =>
+                        editor.updateMazeElement(selectedElement.id, updates)
+                      }
+                    />
                   ) : (
                     <p className="text-[11px] text-[#909991]">
                       Options for this element are coming soon.
@@ -246,7 +255,8 @@ function LayerRow({
         : element.kind === "puzzle" ||
             element.kind === "sudoku" ||
             element.kind === "word-search" ||
-            element.kind === "word-search-words"
+            element.kind === "word-search-words" ||
+            element.kind === "maze"
           ? Puzzle
           : element.kind === "artwork"
             ? ImageIcon
@@ -314,6 +324,7 @@ function elementLabel(element: EditorElement) {
   if (element.kind === "sudoku") return "Sudoku";
   if (element.kind === "word-search") return "Word Search Grid";
   if (element.kind === "word-search-words") return "Word Search Words";
+  if (element.kind === "maze") return "Maze";
   if (element.kind === "artwork") {
     return (
       ART_LIBRARY.find((artwork) => artwork.key === element.artKey)?.label ??

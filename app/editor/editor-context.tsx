@@ -18,6 +18,12 @@ import type {
   ImageFilterSettings,
   LineCapStyle,
   LineStyle,
+  MazeCellWalls,
+  MazeDifficulty,
+  MazeEditorElement,
+  MazeElementUpdates,
+  MazeGenerationSettings,
+  MazePathCell,
   SaveStatus,
   ShapeEditorElement,
   ShapeElementUpdates,
@@ -46,6 +52,7 @@ import {
 } from "./sudoku-utils";
 import { generateWordSearches } from "./word-search-utils";
 import { withWordSearchSolutionColors } from "./components/word-search-colors";
+import { generateMazes } from "./maze-utils";
 
 const storageKey = "booker-editor-document";
 const defaultImageFilters: ImageFilterSettings = {
@@ -182,6 +189,7 @@ type EditorContextValue = EditorDocument & {
   addWordSearchPages: (
     settings: WordSearchGenerationSettings,
   ) => Promise<void>;
+  addMazePages: (settings: MazeGenerationSettings) => Promise<void>;
   generatePuzzleSolutions: () => void;
   deleteElement: (elementId: string) => void;
   updateTextContent: (elementId: string, content: string) => void;
@@ -206,6 +214,10 @@ type EditorContextValue = EditorDocument & {
   updateWordSearchWordsElement: (
     elementId: string,
     updates: WordSearchWordsElementUpdates,
+  ) => void;
+  updateMazeElement: (
+    elementId: string,
+    updates: MazeElementUpdates,
   ) => void;
   setSudokuDifficulty: (
     elementId: string,
@@ -586,6 +598,46 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         });
         selectElement(null);
       },
+      addMazePages: async (settings) => {
+        const { rows, cols, difficulty, pageCount } = settings;
+        if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) {
+          throw new Error("Maze page count must be between 1 and 50.");
+        }
+
+        const generated = await generateMazes(settings);
+        const latestDocument = parseDocument(
+          JSON.parse(getSnapshot()) as StorageSnapshot,
+        ).document;
+        const pages = generated.map((data, index) => {
+          const element: MazeEditorElement = {
+            id: crypto.randomUUID(),
+            kind: "maze",
+            rows,
+            cols,
+            cells: data.cells,
+            solutionPath: data.solutionPath,
+            difficulty,
+            lineWeight: 1.5,
+            isSolution: false,
+            x: 12,
+            y: 10,
+            width: 76,
+            height: 80,
+            zIndex: 0,
+          };
+          return {
+            id: crypto.randomUUID(),
+            title: `Maze ${index + 1}`,
+            elements: [element],
+          };
+        });
+        saveDocument({
+          ...latestDocument,
+          pages: [...latestDocument.pages, ...pages],
+          currentPageId: pages[0].id,
+        });
+        selectElement(null);
+      },
       generatePuzzleSolutions: () => {
         const puzzles = document.pages.flatMap((page) =>
           page.pageType === "sudoku-solutions" ||
@@ -594,9 +646,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
             : page.elements.filter(
                 (
                   element,
-                ): element is SudokuEditorElement | WordSearchEditorElement =>
+                ): element is
+                  | SudokuEditorElement
+                  | WordSearchEditorElement
+                  | MazeEditorElement =>
                   (element.kind === "sudoku" ||
-                    element.kind === "word-search") &&
+                    element.kind === "word-search" ||
+                    element.kind === "maze") &&
                   !element.isSolution,
               ),
         );
@@ -619,13 +675,28 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           height: 40,
           zIndex: 0,
         }));
-        const sudokuSolutionPages = Array.from(
-          { length: Math.ceil(sudokuSolutions.length / 4) },
+        const mazePuzzles = puzzles.filter(
+          (element): element is MazeEditorElement => element.kind === "maze",
+        );
+        const mazeSolutions = mazePuzzles.map((element, index) => ({
+          ...element,
+          id: crypto.randomUUID(),
+          isSolution: true,
+          solutionNumber: index + 1,
+          x: 7 + (index % 2) * 46,
+          y: 7 + (Math.floor(index / 2) % 2) * 46,
+          width: 40,
+          height: 40,
+          zIndex: 0,
+        }));
+        const sharedSolutions = [...sudokuSolutions, ...mazeSolutions];
+        const puzzleSolutionPages = Array.from(
+          { length: Math.ceil(sharedSolutions.length / 4) },
           (_, pageIndex) => ({
             id: crypto.randomUUID(),
-            title: `Sudoku solutions ${pageIndex + 1}`,
+            title: `Puzzle solutions ${pageIndex + 1}`,
             pageType: "puzzle-solutions" as const,
-            elements: sudokuSolutions.slice(pageIndex * 4, pageIndex * 4 + 4),
+            elements: sharedSolutions.slice(pageIndex * 4, pageIndex * 4 + 4),
           }),
         );
         const wordSearchPuzzles = puzzles.filter(
@@ -681,7 +752,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           },
         );
         const solutionPages = [
-          ...sudokuSolutionPages,
+          ...puzzleSolutionPages,
           ...wordSearchSolutionPages,
         ];
         const pages = [
@@ -892,6 +963,32 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                   ),
                 };
               }),
+          ),
+        });
+      },
+      updateMazeElement: (elementId, updates) => {
+        saveDocument({
+          ...document,
+          pages: updatePageElements(
+            document.pages,
+            currentPage.id,
+            (elements) =>
+              elements.map((element) =>
+                element.id === elementId && element.kind === "maze"
+                  ? {
+                      ...element,
+                      x: clamp(updates.x ?? element.x, 0, 100),
+                      y: clamp(updates.y ?? element.y, 0, 100),
+                      width: Math.max(0.1, updates.width ?? element.width),
+                      height: Math.max(0.1, updates.height ?? element.height),
+                      lineWeight: clamp(
+                        updates.lineWeight ?? element.lineWeight,
+                        0.5,
+                        8,
+                      ),
+                    }
+                  : element,
+              ),
           ),
         });
       },
@@ -1437,6 +1534,38 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
         : {}),
     };
   }
+  if (value.kind === "maze") {
+    const rows = value.rows;
+    const cols = value.cols;
+    const solutionNumber = value.solutionNumber;
+    if (
+        !isMazeDimension(rows) ||
+        !isMazeDimension(cols) ||
+        !isMazeCells(value.cells, rows, cols) ||
+        !isMazePath(value.solutionPath, value.cells, rows, cols) ||
+        !isMazeDifficulty(value.difficulty)
+    ) {
+        return null;
+    }
+    return {
+        ...position,
+        kind: "maze",
+        rows,
+        cols,
+        cells: value.cells,
+        solutionPath: value.solutionPath,
+        difficulty: value.difficulty,
+        lineWeight: isFiniteNumber(value.lineWeight)
+          ? clamp(value.lineWeight, 0.5, 8)
+          : 1.5,
+        isSolution: value.isSolution === true,
+        ...(typeof solutionNumber === "number" &&
+        Number.isInteger(solutionNumber) &&
+        solutionNumber > 0
+          ? { solutionNumber }
+          : {}),
+    };
+  }
   if (value.kind === "artwork" && isArtKey(value.artKey)) {
     return {
       ...position,
@@ -1568,6 +1697,119 @@ function isGridDimension(value: unknown): value is number {
     value >= 5 &&
     value <= 30
   );
+}
+
+function isMazeDimension(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 5 &&
+    value <= 40
+  );
+}
+
+function isMazeDifficulty(value: unknown): value is MazeDifficulty {
+  return (
+    value === "easy" ||
+    value === "medium" ||
+    value === "hard" ||
+    value === "insane"
+  );
+}
+
+function isMazeCells(
+  value: unknown,
+  rows: number,
+  cols: number,
+): value is MazeCellWalls[][] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== rows ||
+    !value.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === cols &&
+        row.every(
+          (cell) =>
+            isRecord(cell) &&
+            typeof cell.top === "boolean" &&
+            typeof cell.right === "boolean" &&
+            typeof cell.bottom === "boolean" &&
+            typeof cell.left === "boolean",
+        ),
+    )
+  ) {
+    return false;
+  }
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const cell = value[row][col] as MazeCellWalls;
+      if (
+        (row === 0 && !cell.top) ||
+        (col === 0 && !cell.left) ||
+        (row === rows - 1 && !cell.bottom) ||
+        (col === cols - 1 && !cell.right) ||
+        (col < cols - 1 && cell.right !== value[row][col + 1].left) ||
+        (row < rows - 1 && cell.bottom !== value[row + 1][col].top)
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function isMazePath(
+  value: unknown,
+  cells: unknown,
+  rows: number,
+  cols: number,
+): value is MazePathCell[] {
+  if (
+    !isMazeCells(cells, rows, cols) ||
+    !Array.isArray(value) ||
+    value.length < 2 ||
+    !value.every(
+      (point) =>
+        isRecord(point) &&
+        isInteger(point.row) &&
+        isInteger(point.col) &&
+        point.row >= 0 &&
+        point.row < rows &&
+        point.col >= 0 &&
+        point.col < cols,
+    )
+  ) {
+    return false;
+  }
+
+  const path = value as MazePathCell[];
+  if (
+    path[0].row !== 0 ||
+    path[0].col !== 0 ||
+    path[path.length - 1].row !== rows - 1 ||
+    path[path.length - 1].col !== cols - 1
+  ) {
+    return false;
+  }
+
+  return path.every((point, index) => {
+    if (index === path.length - 1) return true;
+    const next = path[index + 1];
+    const rowDelta = next.row - point.row;
+    const colDelta = next.col - point.col;
+    if (Math.abs(rowDelta) + Math.abs(colDelta) !== 1) return false;
+    const direction =
+      rowDelta === -1
+        ? "top"
+        : rowDelta === 1
+          ? "bottom"
+          : colDelta === -1
+            ? "left"
+            : "right";
+    return !cells[point.row][point.col][direction];
+  });
 }
 
 function isWordSearchGrid(
@@ -1730,6 +1972,22 @@ function isEditorElement(value: unknown): value is EditorElement {
       isFiniteNumber(value.fontSize) &&
       isFiniteNumber(value.spacing) &&
       isFiniteNumber(value.lineSpacing) &&
+      typeof value.isSolution === "boolean" &&
+      (solutionNumber === undefined ||
+        (typeof solutionNumber === "number" &&
+          Number.isInteger(solutionNumber) &&
+          solutionNumber > 0))
+    );
+  }
+  if (value.kind === "maze") {
+    const solutionNumber = value.solutionNumber;
+    return (
+      isMazeDimension(value.rows) &&
+      isMazeDimension(value.cols) &&
+      isMazeCells(value.cells, value.rows, value.cols) &&
+      isMazePath(value.solutionPath, value.cells, value.rows, value.cols) &&
+      isMazeDifficulty(value.difficulty) &&
+      isFiniteNumber(value.lineWeight) &&
       typeof value.isSolution === "boolean" &&
       (solutionNumber === undefined ||
         (typeof solutionNumber === "number" &&

@@ -39,6 +39,19 @@ export function PageThumbnail({
         getWordSearchSolutionCellColors(element.words),
       ]),
   );
+  const mazeSolutionCells = new Map(
+    page.elements
+      .filter(
+        (element): element is Extract<EditorElement, { kind: "maze" }> =>
+          element.kind === "maze" && element.isSolution,
+      )
+      .map((element) => [
+        element.id,
+        new Set(
+          element.solutionPath.map(({ row, col }) => `${row}-${col}`),
+        ),
+      ]),
+  );
 
   return (
     <div className="group relative w-[68px] shrink-0 transition-transform duration-150 hover:-translate-y-0.5">
@@ -69,7 +82,8 @@ export function PageThumbnail({
                       : element.kind === "artwork"
                         ? "absolute block"
                             : element.kind === "sudoku" ||
-                                element.kind === "word-search"
+                                element.kind === "word-search" ||
+                                element.kind === "maze"
                               ? "absolute grid overflow-hidden"
                               : element.kind === "word-search-words"
                                 ? "absolute flex flex-wrap content-center justify-center gap-px overflow-hidden text-center leading-none"
@@ -89,7 +103,9 @@ export function PageThumbnail({
                     ? `${Math.min(3, element.letterSize / 6)}px`
                     : element.kind === "word-search-words"
                       ? `${Math.max(1, element.fontSize / 6)}px`
-                      : "3px",
+                      : element.kind === "maze"
+                        ? `${Math.max(1, Math.min(2, 12 / Math.max(element.rows, element.cols)))}px`
+                        : "3px",
                 ...(element.kind === "word-search-words"
                   ? {
                       letterSpacing: `${element.spacing / 6}px`,
@@ -106,6 +122,11 @@ export function PageThumbnail({
                         gridTemplateColumns: `repeat(${element.cols}, minmax(0, 1fr))`,
                         gridTemplateRows: `repeat(${element.rows}, minmax(0, 1fr))`,
                       }
+                    : element.kind === "maze"
+                      ? {
+                          gridTemplateColumns: `repeat(${element.cols}, minmax(0, 1fr))`,
+                          gridTemplateRows: `repeat(${element.rows}, minmax(0, 1fr))`,
+                        }
                     : {}),
                 transform:
                   element.kind === "shape" || element.kind === "artwork"
@@ -246,6 +267,55 @@ export function PageThumbnail({
                     </span>
                   ))}
                 </span>
+              ) : element.kind === "maze" ? (
+                element.cells.flatMap((row, rowIndex) =>
+                  row.map((cell, colIndex) => {
+                    const isStart = rowIndex === 0 && colIndex === 0;
+                    const isEnd =
+                      rowIndex === element.rows - 1 &&
+                      colIndex === element.cols - 1;
+                    const isOnSolutionPath =
+                      mazeSolutionCells
+                        .get(element.id)
+                        ?.has(`${rowIndex}-${colIndex}`) ?? false;
+                    return (
+                      <span
+                        className="flex items-center justify-center overflow-hidden"
+                        key={`${rowIndex}-${colIndex}`}
+                        style={{
+                          borderTop: cell.top
+                            ? `${Math.min(1, element.lineWeight / 4)}px solid #2b4736`
+                            : undefined,
+                          borderRight: cell.right
+                            ? `${Math.min(1, element.lineWeight / 4)}px solid #2b4736`
+                            : undefined,
+                          borderBottom: cell.bottom
+                            ? `${Math.min(1, element.lineWeight / 4)}px solid #2b4736`
+                            : undefined,
+                          borderLeft: cell.left
+                            ? `${Math.min(1, element.lineWeight / 4)}px solid #2b4736`
+                            : undefined,
+                          backgroundColor: isOnSolutionPath
+                            ? "#fff1c7"
+                            : "#fffefa",
+                        }}
+                      >
+                        {(isStart || isEnd) && (
+                          <span
+                            className="flex aspect-square w-[76%] items-center justify-center rounded-full font-semibold leading-none text-white"
+                            style={{
+                              backgroundColor: isStart
+                                ? "#238b45"
+                                : "#c63d3d",
+                            }}
+                          >
+                            {isStart ? "S" : "E"}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  }),
+                )
               ) : null}
             </span>
           ))}

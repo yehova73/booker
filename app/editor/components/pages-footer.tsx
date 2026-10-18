@@ -29,7 +29,9 @@ export function PagesFooter({
   const hasPuzzles = pages.some((page) =>
     page.elements.some(
       (element) =>
-        (element.kind === "sudoku" || element.kind === "word-search") &&
+        (element.kind === "sudoku" ||
+          element.kind === "word-search" ||
+          element.kind === "maze") &&
         !element.isSolution,
     ),
   );

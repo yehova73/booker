@@ -266,9 +266,11 @@ export function CanvasElement({
             : element.kind === "sudoku"
               ? "Sudoku puzzle"
               : element.kind === "word-search"
-                ? "Word Search puzzle"
+                  ? "Word Search puzzle"
                   : element.kind === "word-search-words"
                     ? "Word Search words"
+                    : element.kind === "maze"
+                      ? "Maze puzzle"
                   : element.kind
       }
       className={`absolute z-10 touch-none rounded-sm ${
@@ -354,7 +356,8 @@ export function CanvasElement({
           element.kind === "image" ||
           element.kind === "sudoku" ||
           element.kind === "word-search" ||
-          element.kind === "word-search-words") &&
+          element.kind === "word-search-words" ||
+          element.kind === "maze") &&
       overlayTarget &&
       createPortal(
         <div
@@ -465,6 +468,9 @@ function FutureElement({
   }
   if (element.kind === "word-search-words") {
     return <WordSearchWordsGraphic element={element} />;
+  }
+  if (element.kind === "maze") {
+    return <MazeGraphic element={element} />;
   }
   if (element.kind === "artwork") {
     const src = getArtSvgDataUri(
@@ -647,6 +653,83 @@ function WordSearchWordsGraphic({
           {word.word}
         </span>
       ))}
+    </div>
+  );
+}
+
+function MazeGraphic({
+  element,
+}: {
+  element: Extract<EditorElement, { kind: "maze" }>;
+}) {
+  const solutionCells = new Set(
+    element.solutionPath.map(({ row, col }) => `${row}-${col}`),
+  );
+  const markerFontSize = Math.max(
+    6,
+    Math.min(14, 180 / Math.max(element.rows, element.cols)),
+  );
+
+  return (
+    <div
+      aria-label={`${element.difficulty} maze, ${element.rows} rows and ${element.cols} cells per row`}
+      className="grid size-full"
+      role="grid"
+      style={{
+        gridTemplateColumns: `repeat(${element.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${element.rows}, minmax(0, 1fr))`,
+      }}
+    >
+      {element.cells.flatMap((row, rowIndex) =>
+        row.map((cell, colIndex) => {
+          const isStart = rowIndex === 0 && colIndex === 0;
+          const isEnd =
+            rowIndex === element.rows - 1 && colIndex === element.cols - 1;
+          const isOnSolutionPath = solutionCells.has(`${rowIndex}-${colIndex}`);
+
+          return (
+            <span
+              aria-label={`Maze cell, row ${rowIndex + 1}, column ${colIndex + 1}${
+                isStart ? ", start" : isEnd ? ", finish" : ""
+              }`}
+              className="relative flex min-w-0 items-center justify-center"
+              key={`${rowIndex}-${colIndex}`}
+              role="gridcell"
+              style={{
+                borderTop: cell.top
+                  ? `${element.lineWeight}px solid #2b4736`
+                  : undefined,
+                borderRight: cell.right
+                  ? `${element.lineWeight}px solid #2b4736`
+                  : undefined,
+                borderBottom: cell.bottom
+                  ? `${element.lineWeight}px solid #2b4736`
+                  : undefined,
+                borderLeft: cell.left
+                  ? `${element.lineWeight}px solid #2b4736`
+                  : undefined,
+                backgroundColor:
+                  element.isSolution && isOnSolutionPath
+                    ? "#fff1c7"
+                    : "#fffefa",
+              }}
+            >
+              {(isStart || isEnd) && (
+                <span
+                  aria-label={isStart ? "Start" : "Finish"}
+                  className="flex aspect-square w-[76%] items-center justify-center rounded-full font-semibold leading-none text-white"
+                  style={{
+                    backgroundColor: isStart ? "#238b45" : "#c63d3d",
+                    fontSize: `${markerFontSize}px`,
+                  }}
+                >
+                  {isStart ? "S" : "E"}
+                </span>
+              )}
+            </span>
+          );
+        }),
+      )}
     </div>
   );
 }

@@ -78,6 +78,7 @@ function EditorWorkspace() {
             onInsertImage={editor.addImageElement}
             onGenerateSudoku={editor.addSudokuPages}
             onGenerateWordSearch={editor.addWordSearchPages}
+            onGenerateMaze={editor.addMazePages}
           />
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-[#f5f6f3]">
             <div className="flex min-h-0 flex-1">

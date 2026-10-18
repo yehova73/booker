@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import type {
+  MazeGenerationSettings,
   ShapeType,
   SudokuDifficulty,
   TextStyle,
@@ -42,6 +43,7 @@ import type {
 import { ART_LIBRARY, SHAPE_LIBRARY } from "@/lib/designAssets";
 import { SudokuGeneratorDialog } from "./sudoku-generator-dialog";
 import { WordSearchGeneratorDialog } from "./word-search-generator-dialog";
+import { MazeGeneratorDialog } from "./maze-generator-dialog";
 
 const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Paragraph", style: "paragraph" },
@@ -89,6 +91,7 @@ export function LeftSidebar({
   onInsertImage,
   onGenerateSudoku,
   onGenerateWordSearch,
+  onGenerateMaze,
 }: {
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
@@ -102,10 +105,12 @@ export function LeftSidebar({
   onGenerateWordSearch: (
     settings: WordSearchGenerationSettings,
   ) => Promise<void>;
+  onGenerateMaze: (settings: MazeGenerationSettings) => Promise<void>;
 }) {
   const { open } = useSidebar("left");
   const [sudokuDialogOpen, setSudokuDialogOpen] = useState(false);
   const [wordSearchDialogOpen, setWordSearchDialogOpen] = useState(false);
+  const [mazeDialogOpen, setMazeDialogOpen] = useState(false);
   return (
     <Sidebar
       aria-label="Book content"
@@ -167,7 +172,9 @@ export function LeftSidebar({
                             title !== "Artwork" &&
                             !(
                               title === "Puzzles" &&
-                              (item === "Sudoku" || item === "Word search")
+                              (item === "Sudoku" ||
+                                item === "Word search" ||
+                                item === "Maze")
                             )
                           }
                           key={item}
@@ -197,6 +204,11 @@ export function LeftSidebar({
                               item === "Word search"
                             ) {
                               setWordSearchDialogOpen(true);
+                            } else if (
+                              title === "Puzzles" &&
+                              item === "Maze"
+                            ) {
+                              setMazeDialogOpen(true);
                             }
                           }}
                         >
@@ -239,6 +251,11 @@ export function LeftSidebar({
         open={wordSearchDialogOpen}
         onOpenChange={setWordSearchDialogOpen}
         onGenerate={onGenerateWordSearch}
+      />
+      <MazeGeneratorDialog
+        open={mazeDialogOpen}
+        onOpenChange={setMazeDialogOpen}
+        onGenerate={onGenerateMaze}
       />
     </Sidebar>
   );

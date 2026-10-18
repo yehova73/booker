@@ -3,6 +3,7 @@ export type ZoomLevel = "50%" | "75%" | "100%" | "Fit";
 export type SpreadMode = "single" | "spread";
 export type SaveStatus = "loading" | "saved" | "error";
 export type SudokuDifficulty = "easy" | "medium" | "hard" | "insane";
+export type MazeDifficulty = "easy" | "medium" | "hard" | "insane";
 export type TextFontFamily = "serif" | "sans" | "mono";
 export type TextAlignment = "left" | "center" | "right" | "justify";
 export type TextStyle =
@@ -161,6 +162,37 @@ export type WordSearchWordsEditorElement = ElementPosition & {
   solutionNumber?: number;
 };
 
+export type MazeCellWalls = {
+  top: boolean;
+  right: boolean;
+  bottom: boolean;
+  left: boolean;
+};
+
+export type MazePathCell = {
+  row: number;
+  col: number;
+};
+
+export type MazeEditorElement = ElementPosition & {
+  kind: "maze";
+  rows: number;
+  cols: number;
+  cells: MazeCellWalls[][];
+  solutionPath: MazePathCell[];
+  difficulty: MazeDifficulty;
+  lineWeight: number;
+  isSolution: boolean;
+  solutionNumber?: number;
+};
+
+export type MazeGenerationSettings = {
+  rows: number;
+  cols: number;
+  difficulty: MazeDifficulty;
+  pageCount: number;
+};
+
 export type WordSearchGridElementUpdates = Partial<
   Pick<WordSearchEditorElement, "letterSize" | "lineWeight">
 >;
@@ -170,6 +202,10 @@ export type WordSearchWordsElementUpdates = Partial<
     WordSearchWordsEditorElement,
     "fontFamily" | "fontSize" | "spacing" | "lineSpacing"
   >
+>;
+
+export type MazeElementUpdates = Partial<
+  Pick<MazeEditorElement, "x" | "y" | "width" | "height" | "lineWeight">
 >;
 
 export type TextElementUpdates = Partial<
@@ -240,6 +276,7 @@ export type EditorElement =
   | SudokuEditorElement
   | WordSearchEditorElement
   | WordSearchWordsEditorElement
+  | MazeEditorElement
   | (ElementPosition & {
       kind: "puzzle";
       puzzleType: string;
