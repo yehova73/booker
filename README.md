@@ -43,6 +43,8 @@ npm run db:migrate
 
 The dashboard supports user-owned collections and books, with book dimensions
 using the editor's letter, paperback, and square presets.
+Book editor content is saved to the database automatically; image elements are
+not persisted yet.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

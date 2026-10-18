@@ -149,9 +149,9 @@ export function CollectionBooksClient({
                 className="overflow-hidden rounded-xl border bg-card shadow-sm"
               >
                 <div className="relative">
-                  <div
-                    role="img"
-                    aria-label={`${book.title} cover placeholder`}
+                  <Link
+                    href={`/editor/${book.id}`}
+                    aria-label={`Open ${book.title} in the editor`}
                     className="flex aspect-video items-center justify-center"
                     style={{ backgroundColor: `${collection.color}22` }}
                   >
@@ -159,7 +159,7 @@ export function CollectionBooksClient({
                       aria-hidden="true"
                       className="size-8 text-muted-foreground/50"
                     />
-                  </div>
+                  </Link>
                   <div className="absolute right-3 top-3">
                     <DropdownMenu>
                       <DropdownMenuTrigger
@@ -189,7 +189,10 @@ export function CollectionBooksClient({
                     </DropdownMenu>
                   </div>
                 </div>
-                <div className="space-y-2 p-4">
+                <Link
+                  href={`/editor/${book.id}`}
+                  className="block space-y-2 p-4"
+                >
                   <h2 className="truncate font-medium">{book.title}</h2>
                   <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
                     {book.description || "No description yet."}
@@ -197,7 +200,7 @@ export function CollectionBooksClient({
                   <p className="text-xs text-muted-foreground">
                     {dimension?.dimensions} · {dimension?.label}
                   </p>
-                </div>
+                </Link>
               </article>
             );
           })}

@@ -2,10 +2,12 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -54,8 +56,8 @@ import {
 import { generateWordSearches } from "./word-search-utils";
 import { withWordSearchSolutionColors } from "./components/word-search-colors";
 import { generateMazes } from "./maze-utils";
+import { saveBookDataAction } from "@/actions/books/save-book-data";
 
-const storageKey = "booker-editor-document";
 const defaultImageFilters: ImageFilterSettings = {
   brightness: 100,
   contrast: 100,
@@ -65,7 +67,7 @@ const defaultImageFilters: ImageFilterSettings = {
   blur: 0,
   hueRotation: 0,
 };
-const initialDocument: EditorDocument = {
+const defaultDocument: EditorDocument = {
   bookName: "Untitled Book",
   pages: [{ id: "page-1", title: "Page 1", elements: [] }],
   currentPageId: "page-1",
@@ -146,12 +148,6 @@ const textDefaults: Record<
     italic: false,
   },
 };
-const initialSnapshot = JSON.stringify({
-  ready: false,
-  value: null,
-  error: null,
-});
-
 type EditorDocument = {
   bookName: string;
   pages: EditorPage[];
@@ -188,9 +184,7 @@ type EditorContextValue = EditorDocument & {
     difficulty: SudokuDifficulty,
     pageCount: number,
   ) => Promise<void>;
-  addWordSearchPages: (
-    settings: WordSearchGenerationSettings,
-  ) => Promise<void>;
+  addWordSearchPages: (settings: WordSearchGenerationSettings) => Promise<void>;
   addMazePages: (settings: MazeGenerationSettings) => Promise<void>;
   generatePuzzleSolutions: () => void;
   deleteElement: (elementId: string) => void;
@@ -201,10 +195,7 @@ type EditorContextValue = EditorDocument & {
     elementId: string,
     updates: ArtworkElementUpdates,
   ) => void;
-  updateImageElement: (
-    elementId: string,
-    updates: ImageElementUpdates,
-  ) => void;
+  updateImageElement: (elementId: string, updates: ImageElementUpdates) => void;
   updateSudokuElement: (
     elementId: string,
     updates: SudokuElementUpdates,
@@ -217,10 +208,7 @@ type EditorContextValue = EditorDocument & {
     elementId: string,
     updates: WordSearchWordsElementUpdates,
   ) => void;
-  updateMazeElement: (
-    elementId: string,
-    updates: MazeElementUpdates,
-  ) => void;
+  updateMazeElement: (elementId: string, updates: MazeElementUpdates) => void;
   setSudokuDifficulty: (
     elementId: string,
     difficulty: SudokuDifficulty,
@@ -267,16 +255,102 @@ const defaultText: Record<TextStyle, string> = {
 
 export const editorContext = createContext<EditorContextValue | null>(null);
 
-export function EditorProvider({ children }: { children: ReactNode }) {
-  const rawSnapshot = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    () => initialSnapshot,
-  );
-  const snapshot = JSON.parse(rawSnapshot) as StorageSnapshot;
+export function EditorProvider({
+  bookId,
+  bookTitle,
+  initialBookData,
+  initialTrimPreset,
+  children,
+}: {
+  bookId: string;
+  bookTitle: string;
+  initialBookData: unknown;
+  initialTrimPreset: TrimPreset;
+  children: ReactNode;
+}) {
+  const [snapshot, setSnapshot] = useState<StorageSnapshot>(() => ({
+    ready: true,
+    value: JSON.stringify(
+      initialBookData ?? {
+        ...defaultDocument,
+        bookName: bookTitle,
+        trimPreset: initialTrimPreset,
+      },
+    ),
+    error: null,
+  }));
   const parsed = useMemo(() => parseDocument(snapshot), [snapshot]);
+  const [pendingSave, setPendingSave] = useState<{
+    document: EditorDocument;
+    revision: number;
+  } | null>(null);
+  const documentRef = useRef(parsed.document);
+  const saveRevisionRef = useRef(0);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [selectedElementId, selectElement] = useState<string | null>(null);
   const document = parsed.document;
+  const saveDocument = useCallback((nextDocument: EditorDocument) => {
+    saveRevisionRef.current += 1;
+    documentRef.current = nextDocument;
+    setSnapshot({
+      ready: false,
+      value: JSON.stringify(nextDocument),
+      error: null,
+    });
+    setPendingSave({
+      document: nextDocument,
+      revision: saveRevisionRef.current,
+    });
+  }, []);
+  const getCurrentDocument = useCallback(() => documentRef.current, []);
+
+  useEffect(() => {
+    if (!pendingSave) return;
+
+    const timeout = setTimeout(() => {
+      const bookData = {
+        ...pendingSave.document,
+        pages: pendingSave.document.pages.map((page) => ({
+          ...page,
+          elements: page.elements.filter((element) => element.kind !== "image"),
+        })),
+      };
+
+      saveQueueRef.current = saveQueueRef.current
+        .then(async () => {
+          if (saveRevisionRef.current !== pendingSave.revision) return;
+          const result = await saveBookDataAction(bookId, bookData);
+          if (saveRevisionRef.current !== pendingSave.revision) return;
+          if (result.status === "error") {
+            setSnapshot((current) => ({
+              ...current,
+              ready: true,
+              error:
+                result.message?.description ??
+                result.message?.title ??
+                "Could not save this book.",
+            }));
+            return;
+          }
+          setSnapshot((current) => ({
+            ...current,
+            ready: true,
+            error: null,
+          }));
+        })
+        .catch((error: unknown) => {
+          if (saveRevisionRef.current !== pendingSave.revision) return;
+          setSnapshot((current) => ({
+            ...current,
+            ready: true,
+            error: errorMessage(error),
+          }));
+        });
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [bookId, pendingSave]);
+
   const currentPageIndex = Math.max(
     0,
     document.pages.findIndex((page) => page.id === document.currentPageId),
@@ -318,7 +392,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         selectElement(null);
       },
       clonePage: (pageId) => {
-        const pageIndex = document.pages.findIndex((page) => page.id === pageId);
+        const pageIndex = document.pages.findIndex(
+          (page) => page.id === pageId,
+        );
         if (pageIndex === -1) return;
 
         const sourcePage = document.pages[pageIndex];
@@ -339,7 +415,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       deletePage: (pageId) => {
         if (document.pages.length === 1) return;
 
-        const pageIndex = document.pages.findIndex((page) => page.id === pageId);
+        const pageIndex = document.pages.findIndex(
+          (page) => page.id === pageId,
+        );
         if (pageIndex === -1) return;
 
         const pages = document.pages.filter((page) => page.id !== pageId);
@@ -540,9 +618,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         }
 
         const generated = await generateSudokus(squares, difficulty, pageCount);
-        const latestDocument = parseDocument(
-          JSON.parse(getSnapshot()) as StorageSnapshot,
-        ).document;
+        const latestDocument = getCurrentDocument();
         const pages = generated.map((data, index) => {
           const element: SudokuEditorElement = {
             id: crypto.randomUUID(),
@@ -577,11 +653,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       addWordSearchPages: async (settings) => {
         const { cols, rows, dictionary, maxWords, pageCount, dictionaryName } =
           settings;
-        if (
-          !Number.isInteger(pageCount) ||
-          pageCount < 1 ||
-          pageCount > 50
-        ) {
+        if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) {
           throw new Error("Word Search page count must be between 1 and 50.");
         }
 
@@ -592,9 +664,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           maxWords,
           pageCount,
         });
-        const latestDocument = parseDocument(
-          JSON.parse(getSnapshot()) as StorageSnapshot,
-        ).document;
+        const latestDocument = getCurrentDocument();
         const pages = generated.map((data, index) => {
           const element: WordSearchEditorElement = {
             id: crypto.randomUUID(),
@@ -652,9 +722,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         }
 
         const generated = await generateMazes(settings);
-        const latestDocument = parseDocument(
-          JSON.parse(getSnapshot()) as StorageSnapshot,
-        ).document;
+        const latestDocument = getCurrentDocument();
         const pages = generated.map((data, index) => {
           const element: MazeEditorElement = {
             id: crypto.randomUUID(),
@@ -826,7 +894,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
           pages: updatePageElements(
             document.pages,
             currentPage.id,
-            (elements) => elements.filter((element) => element.id !== elementId),
+            (elements) =>
+              elements.filter((element) => element.id !== elementId),
           ),
         });
         if (selectedElementId === elementId) selectElement(null);
@@ -940,9 +1009,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                   y: clamp(updated.y, 0, 100),
                   width: Math.max(0.1, updated.width),
                   height: Math.max(0.1, updated.height),
-                  color: isHexColor(updated.color)
-                    ? updated.color
-                    : "#2b4736",
+                  color: isHexColor(updated.color) ? updated.color : "#2b4736",
                   numberSize: clamp(updated.numberSize, 4, 48),
                 };
               }),
@@ -993,16 +1060,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
                 return {
                   ...element,
                   ...updates,
-                  fontSize: clamp(
-                    updates.fontSize ?? element.fontSize,
-                    4,
-                    72,
-                  ),
-                  spacing: clamp(
-                    updates.spacing ?? element.spacing,
-                    -2,
-                    12,
-                  ),
+                  fontSize: clamp(updates.fontSize ?? element.fontSize, 4, 72),
+                  spacing: clamp(updates.spacing ?? element.spacing, -2, 12),
                   lineSpacing: clamp(
                     updates.lineSpacing ?? element.lineSpacing,
                     0,
@@ -1175,6 +1234,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
       saveError,
       saveStatus,
       selectedElementId,
+      getCurrentDocument,
+      saveDocument,
     ],
   );
 
@@ -1194,73 +1255,9 @@ export function useEditorContext() {
   return context;
 }
 
-function subscribe(listener: () => void) {
-  if (typeof window === "undefined") return () => {};
-  listeners.add(listener);
-  window.addEventListener("storage", handleStorageEvent);
-  getSnapshot();
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", handleStorageEvent);
-  };
-}
-
-let cachedSnapshot = initialSnapshot;
-let hasReadStorage = false;
-const listeners = new Set<() => void>();
-
-function getSnapshot() {
-  if (typeof window === "undefined") return initialSnapshot;
-  if (!hasReadStorage) {
-    hasReadStorage = true;
-    try {
-      cachedSnapshot = serializeSnapshot(
-        window.localStorage.getItem(storageKey),
-        null,
-        true,
-      );
-    } catch (error) {
-      cachedSnapshot = serializeSnapshot(null, errorMessage(error), true);
-    }
-  }
-  return cachedSnapshot;
-}
-
-function handleStorageEvent(event: StorageEvent) {
-  if (event.key !== storageKey && event.key !== null) return;
-  cachedSnapshot = serializeSnapshot(
-    event.key === null ? null : event.newValue,
-    null,
-    true,
-  );
-  hasReadStorage = true;
-  listeners.forEach((listener) => listener());
-}
-
-function saveDocument(document: EditorDocument) {
-  const serialized = JSON.stringify(document);
-  let error: string | null = null;
-  try {
-    window.localStorage.setItem(storageKey, serialized);
-  } catch (reason) {
-    error = errorMessage(reason);
-  }
-  cachedSnapshot = serializeSnapshot(serialized, error, true);
-  hasReadStorage = true;
-  listeners.forEach((listener) => listener());
-}
-
-function serializeSnapshot(
-  value: string | null,
-  error: string | null,
-  ready: boolean,
-) {
-  return JSON.stringify({ ready, value, error });
-}
-
 function parseDocument(snapshot: StorageSnapshot) {
   if (snapshot.value === null) {
-    return { document: initialDocument, error: null };
+    return { document: defaultDocument, error: null };
   }
   try {
     const value: unknown = JSON.parse(snapshot.value);
@@ -1270,8 +1267,8 @@ function parseDocument(snapshot: StorageSnapshot) {
     return { document, error: null };
   } catch (error) {
     return {
-      document: initialDocument,
-      error: `Could not read this book from browser storage: ${errorMessage(error)}`,
+      document: defaultDocument,
+      error: `Could not read saved book data: ${errorMessage(error)}`,
     };
   }
 }
@@ -1324,9 +1321,7 @@ function normalizeDocument(value: unknown): EditorDocument | null {
         spacing: 0,
         lineSpacing: 4,
         isSolution: grid.isSolution,
-        ...(grid.solutionNumber
-          ? { solutionNumber: grid.solutionNumber }
-          : {}),
+        ...(grid.solutionNumber ? { solutionNumber: grid.solutionNumber } : {}),
         x: grid.x,
         y: Math.min(88, grid.y + grid.height + 2),
         width: grid.width,
@@ -1352,7 +1347,7 @@ function normalizeDocument(value: unknown): EditorDocument | null {
     bookName:
       typeof value.bookName === "string" && value.bookName.trim()
         ? value.bookName
-        : initialDocument.bookName,
+        : defaultDocument.bookName,
     pages,
     currentPageId:
       typeof value.currentPageId === "string" &&
@@ -1456,7 +1451,9 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
       borderRadius: isFiniteNumber(value.borderRadius)
         ? clamp(value.borderRadius, 0, 100)
         : 0,
-      opacity: isFiniteNumber(value.opacity) ? clamp(value.opacity, 0, 100) : 100,
+      opacity: isFiniteNumber(value.opacity)
+        ? clamp(value.opacity, 0, 100)
+        : 100,
       rotation: isFiniteNumber(value.rotation)
         ? clamp(value.rotation, -180, 180)
         : 0,
@@ -1469,12 +1466,7 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
   if (value.kind === "sudoku") {
     const squares = value.squares;
     const solutionNumber = value.solutionNumber;
-    if (
-      squares !== 2 &&
-      squares !== 3 &&
-      squares !== 4 &&
-      squares !== 5
-    ) {
+    if (squares !== 2 && squares !== 3 && squares !== 4 && squares !== 5) {
       return null;
     }
     const sideLength = squares * squares;
@@ -1568,9 +1560,7 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
       fontSize: isFiniteNumber(value.fontSize)
         ? clamp(value.fontSize, 4, 72)
         : 12,
-      spacing: isFiniteNumber(value.spacing)
-        ? clamp(value.spacing, -2, 12)
-        : 0,
+      spacing: isFiniteNumber(value.spacing) ? clamp(value.spacing, -2, 12) : 0,
       lineSpacing: isFiniteNumber(value.lineSpacing)
         ? clamp(value.lineSpacing, 0, 24)
         : 4,
@@ -1587,31 +1577,31 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
     const cols = value.cols;
     const solutionNumber = value.solutionNumber;
     if (
-        !isMazeDimension(rows) ||
-        !isMazeDimension(cols) ||
-        !isMazeCells(value.cells, rows, cols) ||
-        !isMazePath(value.solutionPath, value.cells, rows, cols) ||
-        !isMazeDifficulty(value.difficulty)
+      !isMazeDimension(rows) ||
+      !isMazeDimension(cols) ||
+      !isMazeCells(value.cells, rows, cols) ||
+      !isMazePath(value.solutionPath, value.cells, rows, cols) ||
+      !isMazeDifficulty(value.difficulty)
     ) {
-        return null;
+      return null;
     }
     return {
-        ...position,
-        kind: "maze",
-        rows,
-        cols,
-        cells: value.cells,
-        solutionPath: value.solutionPath,
-        difficulty: value.difficulty,
-        lineWeight: isFiniteNumber(value.lineWeight)
-          ? clamp(value.lineWeight, 0.5, 8)
-          : 1.5,
-        isSolution: value.isSolution === true,
-        ...(typeof solutionNumber === "number" &&
-        Number.isInteger(solutionNumber) &&
-        solutionNumber > 0
-          ? { solutionNumber }
-          : {}),
+      ...position,
+      kind: "maze",
+      rows,
+      cols,
+      cells: value.cells,
+      solutionPath: value.solutionPath,
+      difficulty: value.difficulty,
+      lineWeight: isFiniteNumber(value.lineWeight)
+        ? clamp(value.lineWeight, 0.5, 8)
+        : 1.5,
+      isSolution: value.isSolution === true,
+      ...(typeof solutionNumber === "number" &&
+      Number.isInteger(solutionNumber) &&
+      solutionNumber > 0
+        ? { solutionNumber }
+        : {}),
     };
   }
   if (value.kind === "artwork" && isArtKey(value.artKey)) {
@@ -1964,12 +1954,7 @@ function isEditorElement(value: unknown): value is EditorElement {
   if (value.kind === "sudoku") {
     const squares = value.squares;
     const solutionNumber = value.solutionNumber;
-    if (
-      squares !== 2 &&
-      squares !== 3 &&
-      squares !== 4 &&
-      squares !== 5
-    ) {
+    if (squares !== 2 && squares !== 3 && squares !== 4 && squares !== 5) {
       return false;
     }
     const sideLength = squares * squares;
@@ -2192,5 +2177,5 @@ function defaultSudokuNumberSize(squares: 2 | 3 | 4 | 5) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown storage error.";
+  return error instanceof Error ? error.message : "Unknown save error.";
 }

@@ -108,6 +108,7 @@ model Book {
   title        String        @db.VarChar(100)
   description  String        @default("") @db.Text
   dimension    BookDimension @default(paperback)
+  bookData     Json?
   collectionId String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

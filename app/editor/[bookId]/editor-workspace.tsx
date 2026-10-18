@@ -2,18 +2,35 @@
 
 import { useEffect, useState } from "react";
 
-import { EditorProvider, useEditorContext } from "./editor-context";
-import { EditorHeader } from "./components/header";
-import { LeftSidebar } from "./components/left-sidebar";
-import { MainArea } from "./components/main-area";
-import { PagesFooter } from "./components/pages-footer";
-import { RightSidebar } from "./components/right-sidebar";
+import { EditorProvider, useEditorContext } from "../editor-context";
+import { EditorHeader } from "../components/header";
+import { LeftSidebar } from "../components/left-sidebar";
+import { MainArea } from "../components/main-area";
+import { PagesFooter } from "../components/pages-footer";
+import { RightSidebar } from "../components/right-sidebar";
+import type { TrimPreset } from "../components/editor-types";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-export default function EditorPage() {
+export function EditorWorkspacePage({
+  bookId,
+  bookTitle,
+  initialBookData,
+  initialTrimPreset,
+}: {
+  bookId: string;
+  bookTitle: string;
+  initialBookData: unknown;
+  initialTrimPreset: TrimPreset;
+}) {
   return (
-    <EditorProvider>
+    <EditorProvider
+      key={bookId}
+      bookId={bookId}
+      bookTitle={bookTitle}
+      initialBookData={initialBookData}
+      initialTrimPreset={initialTrimPreset}
+    >
       <EditorWorkspace />
     </EditorProvider>
   );
