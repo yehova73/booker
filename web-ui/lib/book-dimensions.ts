@@ -7,6 +7,15 @@ export const bookDimensionOptions = [
 export type BookDimension =
   (typeof bookDimensionOptions)[number]["value"];
 
+export const bookDimensionInches: Record<
+  BookDimension,
+  { width: number; height: number }
+> = {
+  letter: { width: 8.5, height: 11 },
+  paperback: { width: 6, height: 9 },
+  square: { width: 8.25, height: 8.25 },
+};
+
 export function isBookDimension(value: unknown): value is BookDimension {
   return (
     typeof value === "string" &&

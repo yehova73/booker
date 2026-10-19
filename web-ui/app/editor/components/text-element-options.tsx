@@ -88,6 +88,40 @@ export function TextElementOptions({ element, onChange }: TextElementOptionsProp
         </div>
       </Field>
 
+      <Field label="Background color">
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label="Text background color"
+            className="h-9 w-12 cursor-pointer p-1"
+            disabled={element.backgroundColor === null}
+            onChange={(event) =>
+              onChange({ backgroundColor: event.currentTarget.value })
+            }
+            type="color"
+            value={element.backgroundColor ?? "#ffffff"}
+          />
+          <span className="min-w-0 flex-1 text-xs uppercase text-[#859087]">
+            {element.backgroundColor ?? "Transparent"}
+          </span>
+          <label className="flex shrink-0 items-center gap-1.5 text-[10px] text-[#77837a]">
+            <input
+              aria-label="Transparent text background"
+              checked={element.backgroundColor === null}
+              className="accent-[#4f795a]"
+              onChange={(event) =>
+                onChange({
+                  backgroundColor: event.currentTarget.checked
+                    ? null
+                    : "#ffffff",
+                })
+              }
+              type="checkbox"
+            />
+            None
+          </label>
+        </div>
+      </Field>
+
       <RangeField
         label="Rotation"
         min={-180}

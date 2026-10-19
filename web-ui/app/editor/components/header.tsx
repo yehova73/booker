@@ -58,6 +58,8 @@ type EditorHeaderProps = {
   onSpreadModeChange: (value: SpreadMode) => void;
   saveStatus: SaveStatus;
   saveError: string | null;
+  exportingKdpPdf: boolean;
+  onExportKdpPdf: () => void;
 };
 
 export function EditorHeader({
@@ -76,6 +78,8 @@ export function EditorHeader({
   onSpreadModeChange,
   saveStatus,
   saveError,
+  exportingKdpPdf,
+  onExportKdpPdf,
 }: EditorHeaderProps) {
   const activeTrim = trimOptions.find((option) => option.value === trimPreset)!;
   const {
@@ -232,9 +236,13 @@ export function EditorHeader({
               Ready
             </Badge>
           </Button>
-          <Button className="gap-2 bg-[#315d44] px-3.5 text-white hover:bg-[#284d38]">
+          <Button
+            className="gap-2 bg-[#315d44] px-3.5 text-white hover:bg-[#284d38]"
+            disabled={exportingKdpPdf}
+            onClick={onExportKdpPdf}
+          >
             <FileImage className="size-4" />
-            Export KDP PDF
+            {exportingKdpPdf ? "Exporting PDF..." : "Export KDP PDF"}
           </Button>
           <SidebarTrigger
             // aria-expanded={

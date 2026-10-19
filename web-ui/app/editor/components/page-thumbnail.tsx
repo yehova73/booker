@@ -147,6 +147,9 @@ export function PageThumbnail({
                       borderRadius: `${element.borderRadius}px`,
                     }
                   : {}),
+                ...(element.kind === "text" && element.backgroundColor
+                  ? { backgroundColor: element.backgroundColor }
+                  : {}),
               }}
             >
               {element.kind === "text" ? (

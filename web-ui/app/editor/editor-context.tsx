@@ -442,6 +442,7 @@ export function EditorProvider({
           fontFamily: textDefaults[textStyle].fontFamily,
           fontSize: textDefaults[textStyle].fontSize,
           color: textDefaults[textStyle].color,
+          backgroundColor: null,
           rotation: 0,
           lineSpacing: 6,
           tracking: 0,
@@ -1413,6 +1414,8 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
         ? clamp(value.fontSize, 6, 96)
         : defaults.fontSize,
       color: typeof value.color === "string" ? value.color : defaults.color,
+      backgroundColor:
+        typeof value.backgroundColor === "string" ? value.backgroundColor : null,
       rotation: isFiniteNumber(value.rotation)
         ? clamp(value.rotation, -180, 180)
         : 0,

@@ -25,21 +25,26 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { deleteFilesAction } from "@/actions/files";
 import { uploadFileToS3 } from "@/utils/file-upload";
-import { isSupportedImageType } from "@/utils/file-types";
 import {
-  createColoringPagePrompts,
-  generateColoringPageImage,
+  isSupportedImageType,
+  maxImageUploadSize,
+} from "@/utils/file-types";
+import {
+  generateImageFromPrompt,
+  generateImageIdeas,
 } from "../../../actions/books/coloring-page-actions";
 import type { ColoringPageImage } from "./editor-types";
 
 type ColoringMethod = "upload" | "ai";
 type ColoringSize = "portrait" | "square" | "landscape";
 type UploadedImage = ColoringPageImage & { id: string };
+type ReferenceImageFile = { id: string; file: File };
 type GeneratedImage = UploadedImage & {
   selected: boolean;
-  imagePrompt: string;
+  imageIdea: string;
 };
 const maxAiPageCount = 10;
+const maxReferenceImageCount = 16;
 
 const sizeOptions: { value: ColoringSize; label: string; ratio: string }[] = [
   { value: "portrait", label: "Portrait", ratio: "3 / 4" },
@@ -61,6 +66,8 @@ export function ColoringPageDialog({
   const [step, setStep] = useState(1);
   const [method, setMethod] = useState<ColoringMethod | null>(null);
   const [uploads, setUploads] = useState<UploadedImage[]>([]);
+  const [referenceFiles, setReferenceFiles] = useState<ReferenceImageFile[]>([]);
+  const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
   const [prompt, setPrompt] = useState("");
   const [size, setSize] = useState<ColoringSize>("portrait");
   const [pageCount, setPageCount] = useState("4");
@@ -85,6 +92,8 @@ export function ColoringPageDialog({
     setStep(1);
     setMethod(null);
     setUploads([]);
+    setReferenceFiles([]);
+    setReferenceFileIds([]);
     setPrompt("");
     setSize("portrait");
     setPageCount("4");
@@ -108,6 +117,7 @@ export function ColoringPageDialog({
       const fileIds = [
         ...uploads.map((image) => image.fileId),
         ...generated.map((image) => image.fileId),
+        ...referenceFileIds,
       ];
       if (fileIds.length > 0) {
         const cleanup = await deleteFilesAction(fileIds);
@@ -180,6 +190,43 @@ export function ColoringPageDialog({
     }
   }
 
+  function handleReferenceFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    if (files.length === 0) return;
+
+    if (referenceFiles.length + files.length > maxReferenceImageCount) {
+      setError(`You can add up to ${maxReferenceImageCount} reference images.`);
+      return;
+    }
+    if (
+      files.some(
+        (file) =>
+          !["image/jpeg", "image/png", "image/webp"].includes(file.type),
+      )
+    ) {
+      setError("Reference images must be JPEG, PNG, or WebP files.");
+      return;
+    }
+    if (
+      files.some((file) => file.size < 1 || file.size > maxImageUploadSize)
+    ) {
+      setError("Reference images must be no larger than 20 MiB each.");
+      return;
+    }
+
+    setError(null);
+    setReferenceFiles((current) => [
+      ...current,
+      ...files.map((file) => ({ id: crypto.randomUUID(), file })),
+    ]);
+  }
+
+  function removeReferenceFile(id: string) {
+    setReferenceFiles((current) => current.filter((item) => item.id !== id));
+    setError(null);
+  }
+
   async function generatePreviews() {
     if (!validPageCount) return;
     if (!prompt.trim()) {
@@ -188,18 +235,49 @@ export function ColoringPageDialog({
     }
     setError(null);
     setIsGenerating(true);
+    let uploadedReferenceFileIds: string[] = [];
     try {
-      const pagePrompts = await createColoringPagePrompts({
+      if (referenceFiles.length > 0) {
+        setIsUploading(true);
+        const uploadResults = await Promise.allSettled(
+          referenceFiles.map(({ file }) => uploadFileToS3(bookId, file)),
+        );
+        uploadedReferenceFileIds = uploadResults.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value.fileId] : [],
+        );
+        setIsUploading(false);
+
+        const failedUpload = uploadResults.find(
+          (result) => result.status === "rejected",
+        );
+        if (failedUpload?.status === "rejected") {
+          if (uploadedReferenceFileIds.length > 0) {
+            const cleanup = await deleteFilesAction(uploadedReferenceFileIds);
+            if (cleanup.status !== "ok") {
+              throw new Error(
+                cleanup.message?.description ??
+                  cleanup.message?.title ??
+                  "Uploaded reference images could not be removed.",
+              );
+            }
+            uploadedReferenceFileIds = [];
+          }
+          throw failedUpload.reason;
+        }
+      }
+
+      const pageIdeas = await generateImageIdeas({
         prompt: prompt.trim(),
         size,
         pageCount: parsedPageCount,
       });
       const nextGeneration = generationNumber + 1;
       const results = await Promise.allSettled(
-        pagePrompts.map(async (page, index) => {
-          const image = await generateColoringPageImage({
+        pageIdeas.map(async (page, index) => {
+          const image = await generateImageFromPrompt({
             bookId,
-            prompt: page["image-prompt"],
+            imageIdea: page["image-idea"],
+            referenceFileIds: uploadedReferenceFileIds,
             size,
           });
           return {
@@ -208,7 +286,7 @@ export function ColoringPageDialog({
             src: image.src,
             alt: page.name,
             selected: true,
-            imagePrompt: page["image-prompt"],
+            imageIdea: page["image-idea"],
           };
         }),
       );
@@ -217,10 +295,13 @@ export function ColoringPageDialog({
       );
       const failed = results.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") {
-        if (generatedPages.length > 0) {
-          const cleanup = await deleteFilesAction(
-            generatedPages.map((image) => image.fileId),
-          );
+        const generatedFileIds = generatedPages.map((image) => image.fileId);
+        const fileIdsToCleanup = [
+          ...generatedFileIds,
+          ...uploadedReferenceFileIds,
+        ];
+        if (fileIdsToCleanup.length > 0) {
+          const cleanup = await deleteFilesAction(fileIdsToCleanup);
           if (cleanup.status !== "ok") {
             throw new Error(
               cleanup.message?.description ??
@@ -228,12 +309,18 @@ export function ColoringPageDialog({
                 "Incomplete generated images could not be removed.",
             );
           }
+          uploadedReferenceFileIds = [];
         }
         throw failed.reason;
       }
 
-      const oldFileIds = generated.map((image) => image.fileId);
+      const oldFileIds = [
+        ...generated.map((image) => image.fileId),
+        ...referenceFileIds,
+      ];
       setGenerated(generatedPages);
+      setReferenceFileIds(uploadedReferenceFileIds);
+      uploadedReferenceFileIds = [];
       setGenerationNumber(nextGeneration);
       setStep(3);
       if (oldFileIds.length > 0) {
@@ -242,17 +329,29 @@ export function ColoringPageDialog({
           setError(
             cleanup.message?.description ??
               cleanup.message?.title ??
-              "Previous generated images could not be removed.",
+              "Previous images could not be removed.",
           );
         }
       }
     } catch (generationError) {
-      setError(
+      let message =
         generationError instanceof Error
           ? generationError.message
-          : "Preview generation failed.",
+          : "Preview generation failed.";
+      if (uploadedReferenceFileIds.length > 0) {
+        const cleanup = await deleteFilesAction(uploadedReferenceFileIds);
+        if (cleanup.status !== "ok") {
+          setReferenceFileIds((current) => [
+            ...new Set([...current, ...uploadedReferenceFileIds]),
+          ]);
+          message += ` ${cleanup.message?.description ?? cleanup.message?.title ?? "Uploaded reference images could not be removed."}`;
+        }
+      }
+      setError(
+        message,
       );
     } finally {
+      setIsUploading(false);
       setIsGenerating(false);
     }
   }
@@ -264,9 +363,10 @@ export function ColoringPageDialog({
     setError(null);
     setRegeneratingImageId(imageId);
     try {
-      const regenerated = await generateColoringPageImage({
+      const regenerated = await generateImageFromPrompt({
         bookId,
-        prompt: image.imagePrompt,
+        imageIdea: image.imageIdea,
+        referenceFileIds,
         size,
       });
       setGenerated((current) =>
@@ -320,13 +420,14 @@ export function ColoringPageDialog({
       const unusedGeneratedIds = generated
         .filter((image) => !selectedFileIds.has(image.fileId))
         .map((image) => image.fileId);
-      if (unusedGeneratedIds.length > 0) {
-        const cleanup = await deleteFilesAction(unusedGeneratedIds);
+      const fileIdsToCleanup = [...unusedGeneratedIds, ...referenceFileIds];
+      if (fileIdsToCleanup.length > 0) {
+        const cleanup = await deleteFilesAction(fileIdsToCleanup);
         if (cleanup.status !== "ok") {
           throw new Error(
             cleanup.message?.description ??
               cleanup.message?.title ??
-              "Unused generated images could not be removed.",
+              "Unused generated images and references could not be removed.",
           );
         }
       }
@@ -447,6 +548,51 @@ export function ColoringPageDialog({
                   value={prompt}
                 />
               </label>
+
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-medium text-[#68736b]">
+                  Reference images (optional)
+                </legend>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[#cbd7cb] bg-[#f8faf7] px-3 py-2.5 text-xs text-[#526356] transition hover:border-[#78927c] hover:bg-[#f3f7f2]">
+                  <ImagePlus className="size-4 text-[#5d8063]" />
+                  Add reference images
+                  <input
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={isGenerating || isUploading || isAdding}
+                    multiple
+                    onChange={(event) => handleReferenceFiles(event)}
+                    type="file"
+                  />
+                </label>
+                <p className="text-[10px] text-[#929b94]">
+                  Up to {maxReferenceImageCount} JPEG, PNG, or WebP images, 20
+                  MiB each. They upload when you generate previews.
+                </p>
+                {referenceFiles.length > 0 && (
+                  <ul className="space-y-1">
+                    {referenceFiles.map(({ id, file }) => (
+                      <li
+                        className="flex min-w-0 items-center gap-2 rounded-md bg-[#f7f8f5] px-2.5 py-1.5 text-xs text-[#68736b]"
+                        key={id}
+                      >
+                        <span className="min-w-0 flex-1 truncate" title={file.name}>
+                          {file.name}
+                        </span>
+                        <button
+                          aria-label={`Remove ${file.name}`}
+                          className="shrink-0 rounded p-1 hover:bg-[#e9eee8]"
+                          disabled={isGenerating || isUploading || isAdding}
+                          onClick={() => removeReferenceFile(id)}
+                          type="button"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </fieldset>
 
               <fieldset className="space-y-2">
                 <legend className="text-xs font-medium text-[#68736b]">

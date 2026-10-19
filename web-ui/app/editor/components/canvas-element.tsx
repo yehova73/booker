@@ -312,6 +312,7 @@ export function CanvasElement({
           contentEditable={editing && selected}
           ref={textRef}
           style={{
+            backgroundColor: element.backgroundColor ?? undefined,
             color: element.color,
             fontFamily: fontFamilies[element.fontFamily],
             fontSize: `${element.fontSize}px`,

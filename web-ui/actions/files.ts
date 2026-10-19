@@ -168,6 +168,7 @@ export async function deleteFilesAction(
       userId,
       books: { none: {} },
       coverForBook: { is: null },
+      kdpExport: { is: null },
     },
     select: { id: true, storageKey: true },
   });
@@ -175,7 +176,7 @@ export async function deleteFilesAction(
     return {
       status: "error",
       message: {
-        title: "One or more images are in use or are not available.",
+        title: "One or more files are in use or are not available.",
       },
     };
   }
@@ -187,6 +188,7 @@ export async function deleteFilesAction(
       userId,
       books: { none: {} },
       coverForBook: { is: null },
+      kdpExport: { is: null },
     },
   });
   return {

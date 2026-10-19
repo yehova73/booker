@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toBlob } from "html-to-image";
+import { PDFDocument } from "pdf-lib";
 import { toast } from "sonner";
 
 import { deleteFilesAction } from "@/actions/files";
+import {
+  createKdpPdfUploadAction,
+  saveBookKdpExportAction,
+} from "@/actions/books/kdp-export";
 import { saveBookCoverAction } from "@/actions/books/save-book-cover";
 import { uploadFileToS3 } from "@/utils/file-upload";
 import { EditorProvider, useEditorContext } from "../editor-context";
@@ -13,9 +18,16 @@ import { LeftSidebar } from "../components/left-sidebar";
 import { MainArea } from "../components/main-area";
 import { PagesFooter } from "../components/pages-footer";
 import { RightSidebar } from "../components/right-sidebar";
+import {
+  getKdpPdfPageDimensions,
+  KdpExportCanvas,
+} from "../components/kdp-export-canvas";
 import type { EditorPage, TrimPreset } from "../components/editor-types";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+const maxKdpPdfSize = 650_000_000;
+const kdpPdfDpi = 300;
 
 export function EditorWorkspacePage({
   bookId,
@@ -60,14 +72,43 @@ function EditorWorkspace({
   const [coverSavingPageId, setCoverSavingPageId] = useState<string | null>(
     null,
   );
+  const [kdpPdfExporting, setKdpPdfExporting] = useState(false);
+  const kdpPdfExportInProgressRef = useRef(false);
+  const [kdpExportPage, setKdpExportPage] = useState<{
+    page: EditorPage;
+    pageIndex: number;
+    trimPreset: TrimPreset;
+    bleedEnabled: boolean;
+  } | null>(null);
+  const pendingKdpCanvasResolverRef = useRef<
+    ((canvas: HTMLDivElement) => void) | null
+  >(null);
+  const coverSaveInProgressRef = useRef(false);
+  const pendingAutomaticCoverRef = useRef<EditorPage | null>(null);
+  const lastCoverRevisionRef = useRef<{
+    pageId: string;
+    revision: string;
+  } | null>(null);
+  const coverPage =
+    editor.pages.find((page) => page.id === coverPageId) ?? null;
+  const coverPageRef = useRef(coverPage);
+  const selectPageRef = useRef(editor.selectPage);
+  const activeCoverPageId = coverPage?.id;
+  const coverRevision = coverPage
+    ? JSON.stringify([editor.trimPreset, coverPage.elements])
+    : null;
   const selectedElementId = editor.selectedElementId;
   const deleteElement = editor.deleteElement;
 
-  async function setCover(page: EditorPage) {
-    if (coverSavingPageId) return;
+  async function setCover(page: EditorPage, automatic = false) {
+    if (coverSaveInProgressRef.current) {
+      if (automatic) pendingAutomaticCoverRef.current = page;
+      return;
+    }
 
+    coverSaveInProgressRef.current = true;
     setCoverSavingPageId(page.id);
-    editor.selectPage(page.id);
+    selectPageRef.current(page.id);
     let uploadedFileId: string | null = null;
     try {
       await waitForPaint();
@@ -99,7 +140,7 @@ function EditorWorkspace({
       }
 
       setCoverPageId(result.data.coverPageId);
-      toast.success("Book cover saved");
+      if (!automatic) toast.success("Book cover saved");
       uploadedFileId = null;
     } catch (error) {
       let description =
@@ -121,12 +162,202 @@ function EditorWorkspace({
       });
     } finally {
       setCoverSavingPageId(null);
+      coverSaveInProgressRef.current = false;
+      const pendingPage = pendingAutomaticCoverRef.current;
+      pendingAutomaticCoverRef.current = null;
+      if (pendingPage) void setCover(pendingPage, true);
     }
   }
+
+  const setCoverRef = useRef(setCover);
+
+  useEffect(() => {
+    coverPageRef.current = coverPage;
+    selectPageRef.current = editor.selectPage;
+    setCoverRef.current = setCover;
+  });
+
+  useEffect(() => {
+    if (activeCoverPageId === undefined || coverRevision === null) {
+      lastCoverRevisionRef.current = null;
+      pendingAutomaticCoverRef.current = null;
+      return;
+    }
+
+    const lastCoverRevision = lastCoverRevisionRef.current;
+    if (lastCoverRevision?.pageId !== activeCoverPageId) {
+      lastCoverRevisionRef.current = {
+        pageId: activeCoverPageId,
+        revision: coverRevision,
+      };
+      pendingAutomaticCoverRef.current = null;
+      return;
+    }
+    if (lastCoverRevision.revision === coverRevision) return;
+
+    lastCoverRevision.revision = coverRevision;
+    pendingAutomaticCoverRef.current = null;
+    const timeout = setTimeout(() => {
+      const latestCoverPage = coverPageRef.current;
+      if (latestCoverPage?.id === activeCoverPageId) {
+        void setCoverRef.current(latestCoverPage, true);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [activeCoverPageId, coverRevision]);
 
   function deletePage(pageId: string) {
     editor.deletePage(pageId);
     if (coverPageId === pageId) setCoverPageId(null);
+  }
+
+  function waitForKdpCanvas(
+    exportPage: NonNullable<typeof kdpExportPage>,
+  ): Promise<HTMLDivElement> {
+    return new Promise((resolve) => {
+      pendingKdpCanvasResolverRef.current = resolve;
+      setKdpExportPage(exportPage);
+    });
+  }
+
+  function handleKdpCanvasReady(canvas: HTMLDivElement) {
+    const resolve = pendingKdpCanvasResolverRef.current;
+    if (!resolve) return;
+    pendingKdpCanvasResolverRef.current = null;
+    resolve(canvas);
+  }
+
+  async function exportKdpPdf() {
+    if (kdpPdfExportInProgressRef.current) return;
+
+    const bookName = editor.bookName;
+    const trimPreset = editor.trimPreset;
+    const bleedEnabled = editor.bleedEnabled;
+    const interiorPages = editor.pages.filter(
+      (page) => page.id !== coverPageId,
+    );
+    if (interiorPages.length === 0) {
+      toast.error("No interior pages to export", {
+        description: "The designated cover page is exported separately.",
+      });
+      return;
+    }
+
+    kdpPdfExportInProgressRef.current = true;
+    setKdpPdfExporting(true);
+    let uploadedFileId: string | null = null;
+    try {
+      const pdf = await PDFDocument.create();
+      pdf.setTitle(bookName);
+      pdf.setCreator("Booker");
+      pdf.setSubject("KDP print interior");
+
+      for (const [pageIndex, page] of interiorPages.entries()) {
+        const canvas = await waitForKdpCanvas({
+          page,
+          pageIndex,
+          trimPreset,
+          bleedEnabled,
+        });
+        await document.fonts.ready;
+        await waitForCanvasImages(canvas, bookId);
+
+        const pageBlob = await toBlob(canvas, {
+          backgroundColor: "#fffefa",
+          pixelRatio: kdpPdfDpi / 96,
+        });
+        if (!pageBlob || pageBlob.size === 0) {
+          throw new Error(`Page ${pageIndex + 1} could not be rendered.`);
+        }
+
+        const dimensions = getKdpPdfPageDimensions(trimPreset, bleedEnabled);
+        const pageWidth = dimensions.width * 72;
+        const pageHeight = dimensions.height * 72;
+        const image = await pdf.embedPng(await pageBlob.arrayBuffer());
+        const pdfPage = pdf.addPage([pageWidth, pageHeight]);
+        pdfPage.drawImage(image, {
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+        });
+      }
+
+      const pdfBytes = await pdf.save();
+      if (pdfBytes.byteLength > maxKdpPdfSize) {
+        throw new Error("The PDF exceeds KDP's 650 MB file-size limit.");
+      }
+      const pdfBuffer = new ArrayBuffer(pdfBytes.byteLength);
+      new Uint8Array(pdfBuffer).set(pdfBytes);
+
+      const upload = await createKdpPdfUploadAction(
+        bookId,
+        pdfBuffer.byteLength,
+      );
+      if (upload.status !== "ok" || !upload.data) {
+        throw new Error(
+          upload.message?.description ??
+            upload.message?.title ??
+            "The PDF upload could not be prepared.",
+        );
+      }
+      uploadedFileId = upload.data.fileId;
+
+      const uploadResponse = await fetch(upload.data.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/pdf" },
+        body: pdfBuffer,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error(
+          `PDF upload failed with HTTP ${uploadResponse.status}.`,
+        );
+      }
+
+      const saved = await saveBookKdpExportAction(
+        bookId,
+        uploadedFileId,
+        trimPreset,
+        bleedEnabled,
+      );
+      if (saved.status !== "ok" || !saved.data) {
+        throw new Error(
+          saved.message?.description ??
+            saved.message?.title ??
+            "The PDF could not be linked to this book.",
+        );
+      }
+      uploadedFileId = null;
+
+      downloadPdf(
+        new Blob([pdfBuffer], { type: "application/pdf" }),
+        getKdpPdfFilename(bookName),
+      );
+      toast.success("KDP interior PDF exported", {
+        description: `${interiorPages.length} page${interiorPages.length === 1 ? "" : "s"} saved to this book.`,
+      });
+    } catch (error) {
+      let description =
+        error instanceof Error
+          ? error.message
+          : "The KDP PDF could not be exported.";
+      if (uploadedFileId) {
+        try {
+          const cleanup = await deleteFilesAction([uploadedFileId]);
+          if (cleanup.status !== "ok") {
+            description += ` ${cleanup.message?.description ?? cleanup.message?.title ?? "The unused PDF could not be removed."}`;
+          }
+        } catch (cleanupError) {
+          description += ` ${cleanupError instanceof Error ? cleanupError.message : "The unused PDF could not be removed."}`;
+        }
+      }
+      toast.error("KDP PDF export failed", { description });
+    } finally {
+      setKdpExportPage(null);
+      kdpPdfExportInProgressRef.current = false;
+      setKdpPdfExporting(false);
+    }
   }
 
   useEffect(() => {
@@ -174,6 +405,8 @@ function EditorWorkspace({
           onSpreadModeChange={editor.setSpreadMode}
           saveStatus={editor.saveStatus}
           saveError={editor.saveError}
+          exportingKdpPdf={kdpPdfExporting}
+          onExportKdpPdf={() => void exportKdpPdf()}
         />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <LeftSidebar
@@ -226,6 +459,16 @@ function EditorWorkspace({
           coverSavingPageId={coverSavingPageId}
           onGenerateSolutions={editor.generatePuzzleSolutions}
         />
+        {kdpExportPage && (
+          <KdpExportCanvas
+            key={`${kdpExportPage.pageIndex}-${kdpExportPage.page.id}`}
+            page={kdpExportPage.page}
+            pageIndex={kdpExportPage.pageIndex}
+            trimPreset={kdpExportPage.trimPreset}
+            bleedEnabled={kdpExportPage.bleedEnabled}
+            onReady={handleKdpCanvasReady}
+          />
+        )}
       </SidebarProvider>
     </TooltipProvider>
   );
@@ -237,6 +480,36 @@ function waitForPaint() {
       requestAnimationFrame(() => resolve());
     });
   });
+}
+
+async function waitForCanvasImages(canvas: HTMLElement, bookId: string) {
+  const images = Array.from(canvas.querySelectorAll<HTMLImageElement>("img"));
+  for (const image of images) {
+    const fileId = image.closest<HTMLElement>("[data-file-id]")?.dataset
+      .fileId;
+    if (fileId) {
+      image.removeAttribute("srcset");
+      image.src = `/api/books/${encodeURIComponent(bookId)}/files/${encodeURIComponent(fileId)}`;
+    }
+  }
+  await Promise.all(images.map((image) => image.decode()));
+}
+
+function getKdpPdfFilename(bookName: string) {
+  const safeName =
+    bookName.replace(/[\u0000-\u001f<>:"/\\|?*]/g, "-").trim() || "book";
+  return `${safeName}-kdp-interior.pdf`;
+}
+
+function downloadPdf(file: Blob, filename: string) {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 async function renderCoverCanvas(canvas: HTMLElement, bookId: string) {

@@ -52,6 +52,7 @@ export type TextEditorElement = ElementPosition & {
   fontFamily: TextFontFamily;
   fontSize: number;
   color: string;
+  backgroundColor: string | null;
   rotation: number;
   lineSpacing: number;
   tracking: number;
@@ -223,6 +224,7 @@ export type TextElementUpdates = Partial<
     | "fontFamily"
     | "fontSize"
     | "color"
+    | "backgroundColor"
     | "rotation"
     | "lineSpacing"
     | "tracking"

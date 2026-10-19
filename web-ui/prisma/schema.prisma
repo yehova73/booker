@@ -118,6 +118,7 @@ model Book {
   collection   Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   cover        File?         @relation("BookCover", fields: [coverId], references: [id], onDelete: SetNull)
   files        File[]
+  kdpExports   BookKdpExport[]
 
   @@index([collectionId, createdAt])
 }
@@ -133,6 +134,20 @@ model File {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   books        Book[]
   coverForBook Book?    @relation("BookCover")
+  kdpExport    BookKdpExport?
 
   @@index([userId, createdAt])
+}
+
+model BookKdpExport {
+  id           String       @id @default(cuid())
+  bookId       String
+  fileId       String       @unique
+  trimPreset   BookDimension
+  bleedEnabled Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  book         Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  file         File         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([bookId, createdAt])
 }
