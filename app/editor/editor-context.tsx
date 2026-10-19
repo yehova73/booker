@@ -268,15 +268,20 @@ export function EditorProvider({
   initialTrimPreset: TrimPreset;
   children: ReactNode;
 }) {
-  const [snapshot, setSnapshot] = useState<StorageSnapshot>(() => ({
-    ready: true,
-    value: JSON.stringify(
-      initialBookData ?? {
+  const initialDocument = isRecord(initialBookData)
+    ? {
+        ...initialBookData,
+        bookName: bookTitle,
+        trimPreset: initialTrimPreset,
+      }
+    : {
         ...defaultDocument,
         bookName: bookTitle,
         trimPreset: initialTrimPreset,
-      },
-    ),
+      };
+  const [snapshot, setSnapshot] = useState<StorageSnapshot>(() => ({
+    ready: true,
+    value: JSON.stringify(initialDocument),
     error: null,
   }));
   const parsed = useMemo(() => parseDocument(snapshot), [snapshot]);

@@ -5,10 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import {
-  isBookDimension,
-  type BookDimension,
-} from "@/lib/book-dimensions";
+import { isBookDimension, type BookDimension } from "@/lib/book-dimensions";
 import type { ServerActionResponse } from "@/hooks/use-server-action";
 
 type ParsedBookData = {
@@ -39,7 +36,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseBookData(
   input: unknown,
 ): { value: ParsedBookData } | { error: string } {
-  if (!isRecord(input) || !Array.isArray(input.pages) || input.pages.length < 1) {
+  if (
+    !isRecord(input) ||
+    !Array.isArray(input.pages) ||
+    input.pages.length < 1
+  ) {
     return { error: "The editor document is invalid." };
   }
 
@@ -95,7 +96,9 @@ function parseBookData(
       }
       if (element.kind === "image") continue;
       if (!editorElementKinds.has(element.kind)) {
-        return { error: "The editor document contains an unsupported element." };
+        return {
+          error: "The editor document contains an unsupported element.",
+        };
       }
 
       const serializedElement = JSON.stringify(element);
@@ -199,6 +202,7 @@ export async function saveBookDataAction(
   }
 
   revalidatePath(`/editor/${bookId}`);
+  revalidatePath(`/dashboard/book/${bookId}`);
   revalidatePath(`/dashboard/collections/${book.collectionId}`);
   return {
     status: "ok",

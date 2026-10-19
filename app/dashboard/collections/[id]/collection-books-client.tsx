@@ -74,9 +74,8 @@ export function CollectionBooksClient({
   const [formOpen, setFormOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<BookCardData | null>(null);
   const [deletingBook, setDeletingBook] = useState<BookCardData | null>(null);
-  const { call: deleteBook, loading: isDeleting } = useServerAction(
-    deleteBookAction,
-  );
+  const { call: deleteBook, loading: isDeleting } =
+    useServerAction(deleteBookAction);
 
   function openCreateDialog() {
     setEditingBook(null);
@@ -127,11 +126,7 @@ export function CollectionBooksClient({
           <p className="mt-1 text-sm text-muted-foreground">
             Add a book to start building this collection.
           </p>
-          <Button
-            type="button"
-            className="mt-4"
-            onClick={openCreateDialog}
-          >
+          <Button type="button" className="mt-4" onClick={openCreateDialog}>
             <Plus />
             New book
           </Button>
@@ -150,8 +145,8 @@ export function CollectionBooksClient({
               >
                 <div className="relative">
                   <Link
-                    href={`/editor/${book.id}`}
-                    aria-label={`Open ${book.title} in the editor`}
+                    href={`/dashboard/book/${book.id}`}
+                    aria-label={`View ${book.title}`}
                     className="flex aspect-video items-center justify-center"
                     style={{ backgroundColor: `${collection.color}22` }}
                   >
@@ -190,7 +185,7 @@ export function CollectionBooksClient({
                   </div>
                 </div>
                 <Link
-                  href={`/editor/${book.id}`}
+                  href={`/dashboard/book/${book.id}`}
                   className="block space-y-2 p-4"
                 >
                   <h2 className="truncate font-medium">{book.title}</h2>
@@ -281,12 +276,10 @@ function BookFormDialog({
   const [dimension, setDimension] = useState<BookDimension>(
     book?.dimension ?? "paperback",
   );
-  const { call: createBook, loading: isCreating } = useServerAction(
-    createBookAction,
-  );
-  const { call: updateBook, loading: isUpdating } = useServerAction(
-    updateBookAction,
-  );
+  const { call: createBook, loading: isCreating } =
+    useServerAction(createBookAction);
+  const { call: updateBook, loading: isUpdating } =
+    useServerAction(updateBookAction);
   const isSaving = isCreating || isUpdating;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
