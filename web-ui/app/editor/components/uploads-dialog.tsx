@@ -167,7 +167,7 @@ export function UploadsDialog({
           )}
         </div>
 
-        <DialogFooter className="border-[#edf0ec]">
+        <DialogFooter className="border-[#edf0ec] pb-8 px-8">
           <Button
             disabled={!selectedFile || isLoading || Boolean(error)}
             onClick={addSelectedImage}

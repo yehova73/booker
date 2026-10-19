@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 
+import { BufferedColorInput } from "./buffered-color-input";
 import type {
   ArtworkEditorElement,
   ArtworkElementUpdates,
@@ -172,11 +173,10 @@ function ColorField({
     <div className="flex flex-col gap-1.5 text-[11px] font-medium text-[#68736b]">
       <span>Color</span>
       <div className="flex items-center gap-2">
-        <Input
+        <BufferedColorInput
           aria-label="Artwork color"
           className="h-9 w-12 cursor-pointer p-1"
-          onChange={(event) => onChange(event.currentTarget.value)}
-          type="color"
+          onCommit={onChange}
           value={value}
         />
         <span className="min-w-0 flex-1 text-xs uppercase text-[#859087]">

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   AlignVerticalSpaceAround,
   ArrowDown,
@@ -18,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { ART_LIBRARY } from "@/lib/designAssets";
 import { useEditorContext } from "../editor-context";
+import { DesignTab } from "./design-tab";
 import { ArtworkElementOptions } from "./artwork-element-options";
 import { ColoringPageDialog } from "./coloring-page-dialog";
 import type { EditorElement } from "./editor-types";
@@ -34,18 +36,26 @@ import {
 
 export function RightSidebar({
   bookId,
+  coverPageId,
+  selectedDesignElementId,
+  onSelectDesignElement,
   coloringDialogOpen,
   onColoringDialogOpenChange,
   uploadsDialogOpen,
   onUploadsDialogOpenChange,
 }: {
   bookId: string;
+  coverPageId: string | null;
+  selectedDesignElementId: string | null;
+  onSelectDesignElement: (elementId: string | null, pageId?: string) => void;
   coloringDialogOpen: boolean;
   onColoringDialogOpenChange: (open: boolean) => void;
   uploadsDialogOpen: boolean;
   onUploadsDialogOpenChange: (open: boolean) => void;
 }) {
   const editor = useEditorContext();
+  const [activeTab, setActiveTab] = useState("current-page");
+  const displayedTab = selectedDesignElementId ? "design" : activeTab;
   const layerPage =
     editor.pages.find((page) =>
       page.elements.some((element) => element.id === editor.selectedElementId),
@@ -68,7 +78,11 @@ export function RightSidebar({
       <SidebarContent className="bg-white p-0">
         <Tabs
           className="flex min-h-0 flex-1 flex-col gap-0"
-          defaultValue="current-page"
+          onValueChange={(value) => {
+            setActiveTab(value);
+            if (value === "current-page") onSelectDesignElement(null);
+          }}
+          value={displayedTab}
         >
           <div className="border-b border-[#edf0ec] ">
             <TabsList className="grid h-9 w-full grid-cols-2 bg-transparent">
@@ -235,7 +249,16 @@ export function RightSidebar({
             </div>
           </TabsContent>
 
-          <TabsContent className="" value="design"></TabsContent>
+          <TabsContent
+            className="min-h-0 overflow-y-auto"
+            value="design"
+          >
+            <DesignTab
+              coverPageId={coverPageId}
+              selectedElementId={selectedDesignElementId}
+              onSelectElement={onSelectDesignElement}
+            />
+          </TabsContent>
         </Tabs>
       </SidebarContent>
       <ColoringPageDialog

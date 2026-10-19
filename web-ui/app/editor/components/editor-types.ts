@@ -300,3 +300,38 @@ export type EditorPage = {
   pageType?: "sudoku-solutions" | "puzzle-solutions";
   elements: EditorElement[];
 };
+
+export type RepeatingDesignElement = Extract<
+  EditorElement,
+  { kind: "text" | "shape" | "artwork" }
+>;
+
+export type PageNumberFormat = "arabic" | "roman-lower" | "roman-upper";
+export type PageNumberPosition =
+  | "top-outer"
+  | "top-inner"
+  | "top-center"
+  | "bottom-outer"
+  | "bottom-inner"
+  | "bottom-center";
+export type PageBorderStyle = "solid" | "dashed" | "dotted" | "double";
+
+export type BookDesignSettings = {
+  pageNumbers: {
+    enabled: boolean;
+    format: PageNumberFormat;
+    position: PageNumberPosition;
+    fontFamily: TextFontFamily;
+    fontSize: number;
+    color: string;
+  };
+  pageBorder: {
+    enabled: boolean;
+    style: PageBorderStyle;
+    inset: number;
+    width: number;
+    color: string;
+  };
+  excludedPageIds: string[];
+  elements: RepeatingDesignElement[];
+};

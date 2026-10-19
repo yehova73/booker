@@ -4,7 +4,6 @@ import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Italic } from "
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -15,6 +14,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 
+import { BufferedColorInput } from "./buffered-color-input";
 import type { TextEditorElement, TextElementUpdates } from "./editor-types";
 
 type TextElementOptionsProps = {
@@ -77,11 +77,10 @@ export function TextElementOptions({ element, onChange }: TextElementOptionsProp
 
       <Field label="Color">
         <div className="flex items-center gap-2">
-          <Input
+          <BufferedColorInput
             aria-label="Text color"
             className="h-9 w-12 cursor-pointer p-1"
-            onChange={(event) => onChange({ color: event.currentTarget.value })}
-            type="color"
+            onCommit={(color) => onChange({ color })}
             value={element.color}
           />
           <span className="text-xs uppercase text-[#859087]">{element.color}</span>
@@ -90,14 +89,11 @@ export function TextElementOptions({ element, onChange }: TextElementOptionsProp
 
       <Field label="Background color">
         <div className="flex items-center gap-2">
-          <Input
+          <BufferedColorInput
             aria-label="Text background color"
             className="h-9 w-12 cursor-pointer p-1"
             disabled={element.backgroundColor === null}
-            onChange={(event) =>
-              onChange({ backgroundColor: event.currentTarget.value })
-            }
-            type="color"
+            onCommit={(backgroundColor) => onChange({ backgroundColor })}
             value={element.backgroundColor ?? "#ffffff"}
           />
           <span className="min-w-0 flex-1 text-xs uppercase text-[#859087]">

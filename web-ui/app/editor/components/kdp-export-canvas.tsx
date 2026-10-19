@@ -4,8 +4,13 @@ import { useEffect, useRef } from "react";
 
 import { bookDimensionInches } from "@/lib/book-dimensions";
 
-import type { EditorPage, TrimPreset } from "./editor-types";
+import type {
+  BookDesignSettings,
+  EditorPage,
+  TrimPreset,
+} from "./editor-types";
 import { CanvasElement } from "./canvas-element";
+import { PageDesignOverlay } from "./page-design-overlay";
 
 const cssPixelsPerInch = 96;
 const bleedInches = 0.125;
@@ -30,12 +35,20 @@ export function KdpExportCanvas({
   pageIndex,
   trimPreset,
   bleedEnabled,
+  pageNumber,
+  pageNumberById,
+  coverPageId,
+  design,
   onReady,
 }: {
   page: EditorPage;
   pageIndex: number;
   trimPreset: TrimPreset;
   bleedEnabled: boolean;
+  pageNumber: number;
+  pageNumberById: Record<string, number>;
+  coverPageId: string | null;
+  design: BookDesignSettings;
   onReady: (canvas: HTMLDivElement) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -107,6 +120,7 @@ export function KdpExportCanvas({
       >
         <div
           data-page-canvas
+          data-page-id={page.id}
           style={{
             position: "absolute",
             left: `${outsideBleed * cssPixelsPerInch}px`,
@@ -130,6 +144,16 @@ export function KdpExportCanvas({
               onUpdateText={() => {}}
             />
           ))}
+          <PageDesignOverlay
+            design={design}
+            pageId={page.id}
+            pageNumber={pageNumber}
+            pageNumberById={pageNumberById}
+            coverPageId={coverPageId}
+            selectedElementId={null}
+            selectedPageId={null}
+            overlayTarget={null}
+          />
         </div>
       </div>
     </div>

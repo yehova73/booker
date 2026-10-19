@@ -6,23 +6,31 @@ import { Check } from "lucide-react";
 import type {
   EditorElement,
   EditorPage,
+  BookDesignSettings,
   SpreadMode,
   TrimPreset,
   ZoomLevel,
 } from "./editor-types";
 import { CanvasElement } from "./canvas-element";
+import { PageDesignOverlay } from "./page-design-overlay";
 
 type MainAreaProps = {
   page: EditorPage;
   pageNumber: number;
   spreadPages: [EditorPage | null, EditorPage | null];
   spreadPageNumbers: [number | null, number | null];
+  pageNumberById: Record<string, number>;
+  design: BookDesignSettings;
+  coverPageId: string | null;
   selectedElementId: string | null;
+  selectedDesignElementId: string | null;
+  selectedDesignPageId: string | null;
   trimPreset: TrimPreset;
   bleedEnabled: boolean;
   zoom: ZoomLevel;
   spreadMode: SpreadMode;
   onSelectElement: (id: string | null) => void;
+  onSelectDesignElement: (id: string, pageId: string) => void;
   onMoveElement: (
     id: string,
     position: { x: number; y: number; pageId?: string },
@@ -33,6 +41,16 @@ type MainAreaProps = {
   ) => void;
   onRotateElement: (id: string, rotation: number) => void;
   onUpdateText: (id: string, content: string) => void;
+  onMoveDesignElement: (
+    id: string,
+    position: { x: number; y: number; pageId?: string },
+  ) => void;
+  onResizeDesignElement: (
+    id: string,
+    size: { x: number; y: number; width: number; height: number },
+  ) => void;
+  onRotateDesignElement: (id: string, rotation: number) => void;
+  onUpdateDesignText: (id: string, content: string) => void;
 };
 
 export function MainArea({
@@ -40,16 +58,26 @@ export function MainArea({
   pageNumber,
   spreadPages,
   spreadPageNumbers,
+  pageNumberById,
+  design,
+  coverPageId,
   selectedElementId,
+  selectedDesignElementId,
+  selectedDesignPageId,
   trimPreset,
   bleedEnabled,
   zoom,
   spreadMode,
   onSelectElement,
+  onSelectDesignElement,
   onMoveElement,
   onResizeElement,
   onRotateElement,
   onUpdateText,
+  onMoveDesignElement,
+  onResizeDesignElement,
+  onRotateDesignElement,
+  onUpdateDesignText,
 }: MainAreaProps) {
   const pageWidth = getPageWidth(zoom, spreadMode);
   const visiblePages =
@@ -75,15 +103,25 @@ export function MainArea({
                   key={canvasPage.id}
                   page={canvasPage}
                   pageNumber={canvasPageNumber ?? pageNumber}
+                  pageNumberById={pageNumberById}
+                  design={design}
+                  coverPageId={coverPageId}
                   width={pageWidth}
                   trimPreset={trimPreset}
                   bleedEnabled={bleedEnabled}
                   selectedElementId={selectedElementId}
+                  selectedDesignElementId={selectedDesignElementId}
+                  selectedDesignPageId={selectedDesignPageId}
                   onSelectElement={onSelectElement}
+                  onSelectDesignElement={onSelectDesignElement}
                   onMoveElement={onMoveElement}
                   onResizeElement={onResizeElement}
                   onRotateElement={onRotateElement}
                   onUpdateText={onUpdateText}
+                  onMoveDesignElement={onMoveDesignElement}
+                  onResizeDesignElement={onResizeDesignElement}
+                  onRotateDesignElement={onRotateDesignElement}
+                  onUpdateDesignText={onUpdateDesignText}
                 />
               ) : (
                 <div
@@ -121,15 +159,25 @@ export function MainArea({
 function PageCanvas({
   page,
   pageNumber,
+  pageNumberById,
+  design,
+  coverPageId,
   width,
   trimPreset,
   bleedEnabled,
   selectedElementId,
+  selectedDesignElementId,
+  selectedDesignPageId,
   onSelectElement,
+  onSelectDesignElement,
   onMoveElement,
   onResizeElement,
   onRotateElement,
   onUpdateText,
+  onMoveDesignElement,
+  onResizeDesignElement,
+  onRotateDesignElement,
+  onUpdateDesignText,
 }: Omit<
   MainAreaProps,
   | "page"
@@ -141,6 +189,9 @@ function PageCanvas({
 > & {
   page: EditorPage;
   pageNumber: number;
+  pageNumberById: Record<string, number>;
+  design: BookDesignSettings;
+  coverPageId: string | null;
   width: string;
 }) {
   const [pageOverlay, setPageOverlay] = useState<HTMLDivElement | null>(null);
@@ -189,6 +240,22 @@ function PageCanvas({
             onUpdateText={(content) => onUpdateText(element.id, content)}
           />
         ))}
+        <PageDesignOverlay
+          design={design}
+          pageId={page.id}
+          pageNumber={pageNumber}
+          coverPageId={coverPageId}
+          pageNumberById={pageNumberById}
+          selectedElementId={selectedDesignElementId}
+          selectedPageId={selectedDesignPageId}
+          overlayTarget={pageOverlay}
+          interactive
+          onSelectElement={(id) => onSelectDesignElement(id, page.id)}
+          onMoveElement={onMoveDesignElement}
+          onResizeElement={onResizeDesignElement}
+          onRotateElement={onRotateDesignElement}
+          onUpdateText={onUpdateDesignText}
+        />
       </article>
       <div
         aria-hidden="true"

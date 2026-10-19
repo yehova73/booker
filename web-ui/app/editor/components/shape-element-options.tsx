@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { BufferedColorInput } from "./buffered-color-input";
 import type {
   ShapeEditorElement,
   ShapeElementUpdates,
@@ -242,12 +243,11 @@ function ColorField({
     <div className="flex flex-col gap-1.5 text-[11px] font-medium text-[#68736b]">
       <span>{label}</span>
       <div className="flex items-center gap-2">
-        <Input
+        <BufferedColorInput
           aria-label={label}
           className="h-9 w-12 cursor-pointer p-1"
           disabled={value === null}
-          onChange={(event) => onChange(event.currentTarget.value)}
-          type="color"
+          onCommit={onChange}
           value={value ?? "#728a74"}
         />
         <span className="min-w-0 flex-1 text-xs uppercase text-[#859087]">

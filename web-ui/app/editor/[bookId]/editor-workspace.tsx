@@ -86,9 +86,16 @@ function EditorWorkspace({
   const spreadPageIds = spreadPages.flatMap((page) =>
     page ? [page.id] : [],
   );
+  const pageNumberById = Object.fromEntries(
+    editor.pages.map((page, index) => [page.id, index + 1]),
+  );
   const [coloringDialogOpen, setColoringDialogOpen] = useState(false);
   const [uploadsDialogOpen, setUploadsDialogOpen] = useState(false);
   const [coverPageId, setCoverPageId] = useState(initialCoverPageId);
+  const [selectedDesignElement, setSelectedDesignElement] = useState<{
+    id: string;
+    pageId: string;
+  } | null>(null);
   const [coverSavingPageId, setCoverSavingPageId] = useState<string | null>(
     null,
   );
@@ -99,6 +106,10 @@ function EditorWorkspace({
     pageIndex: number;
     trimPreset: TrimPreset;
     bleedEnabled: boolean;
+    pageNumber: number;
+    pageNumberById: Record<string, number>;
+    coverPageId: string | null;
+    design: typeof editor.design;
   } | null>(null);
   const pendingKdpCanvasResolverRef = useRef<
     ((canvas: HTMLDivElement) => void) | null
@@ -119,6 +130,56 @@ function EditorWorkspace({
     : null;
   const selectedElementId = editor.selectedElementId;
   const deleteElement = editor.deleteElement;
+  const selectDesignElement = (id: string | null, pageId?: string) => {
+    editor.selectElement(null);
+    setSelectedDesignElement(
+      id ? { id, pageId: pageId ?? editor.currentPageId } : null,
+    );
+  };
+  const selectPageElement = (id: string | null) => {
+    setSelectedDesignElement(null);
+    editor.selectElement(id);
+  };
+  const moveDesignElement = (
+    elementId: string,
+    position: { x: number; y: number; pageId?: string },
+  ) => {
+    const element = editor.design.elements.find(
+      (candidate) => candidate.id === elementId,
+    );
+    if (element) {
+      editor.updateDesignElement(elementId, {
+        ...element,
+        x: position.x,
+        y: position.y,
+      });
+    }
+  };
+  const resizeDesignElement = (
+    elementId: string,
+    size: { x: number; y: number; width: number; height: number },
+  ) => {
+    const element = editor.design.elements.find(
+      (candidate) => candidate.id === elementId,
+    );
+    if (element) editor.updateDesignElement(elementId, { ...element, ...size });
+  };
+  const rotateDesignElement = (elementId: string, rotation: number) => {
+    const element = editor.design.elements.find(
+      (candidate) => candidate.id === elementId,
+    );
+    if (element) {
+      editor.updateDesignElement(elementId, { ...element, rotation });
+    }
+  };
+  const updateDesignText = (elementId: string, content: string) => {
+    const element = editor.design.elements.find(
+      (candidate) => candidate.id === elementId,
+    );
+    if (element?.kind === "text") {
+      editor.updateDesignElement(elementId, { ...element, content });
+    }
+  };
 
   async function setCover(page: EditorPage, automatic = false) {
     if (coverSaveInProgressRef.current) {
@@ -277,6 +338,10 @@ function EditorWorkspace({
           pageIndex,
           trimPreset,
           bleedEnabled,
+          pageNumber: pageNumberById[page.id] ?? pageIndex + 1,
+          pageNumberById,
+          coverPageId,
+          design: editor.design,
         });
         await document.fonts.ready;
         await waitForCanvasImages(canvas, bookId);
@@ -416,7 +481,10 @@ function EditorWorkspace({
           onBleedChange={editor.setBleedEnabled}
           currentPage={editor.currentPageNumber}
           pageCount={editor.pages.length}
-          onPageChange={editor.changePage}
+          onPageChange={(direction) => {
+            setSelectedDesignElement(null);
+            editor.changePage(direction);
+          }}
           zoom={editor.zoom}
           onZoomChange={editor.setZoom}
           spreadMode={editor.spreadMode}
@@ -446,21 +514,34 @@ function EditorWorkspace({
                 pageNumber={editor.currentPageNumber}
                 spreadPages={spreadPages}
                 spreadPageNumbers={spreadPageNumbers}
+                pageNumberById={pageNumberById}
+                design={editor.design}
+                coverPageId={coverPageId}
                 selectedElementId={editor.selectedElementId}
+                selectedDesignElementId={selectedDesignElement?.id ?? null}
+                selectedDesignPageId={selectedDesignElement?.pageId ?? null}
                 trimPreset={editor.trimPreset}
                 bleedEnabled={editor.bleedEnabled}
                 zoom={editor.zoom}
                 spreadMode={editor.spreadMode}
-                onSelectElement={editor.selectElement}
+                onSelectElement={selectPageElement}
+                onSelectDesignElement={selectDesignElement}
                 onMoveElement={editor.moveElement}
                 onResizeElement={editor.resizeElement}
                 onRotateElement={editor.rotateElement}
                 onUpdateText={editor.updateTextContent}
+                onMoveDesignElement={moveDesignElement}
+                onResizeDesignElement={resizeDesignElement}
+                onRotateDesignElement={rotateDesignElement}
+                onUpdateDesignText={updateDesignText}
               />
             </div>
           </SidebarInset>
           <RightSidebar
             bookId={bookId}
+            coverPageId={coverPageId}
+            selectedDesignElementId={selectedDesignElement?.id ?? null}
+            onSelectDesignElement={selectDesignElement}
             coloringDialogOpen={coloringDialogOpen}
             onColoringDialogOpenChange={setColoringDialogOpen}
             uploadsDialogOpen={uploadsDialogOpen}
@@ -475,7 +556,10 @@ function EditorWorkspace({
               ? spreadPageIds
               : [editor.currentPageId]
           }
-          onSelectPage={editor.selectPage}
+          onSelectPage={(pageId) => {
+            setSelectedDesignElement(null);
+            editor.selectPage(pageId);
+          }}
           onAddPage={editor.addBlankPage}
           onClonePage={editor.clonePage}
           onDeletePage={deletePage}
@@ -491,6 +575,10 @@ function EditorWorkspace({
             pageIndex={kdpExportPage.pageIndex}
             trimPreset={kdpExportPage.trimPreset}
             bleedEnabled={kdpExportPage.bleedEnabled}
+            pageNumber={kdpExportPage.pageNumber}
+            pageNumberById={kdpExportPage.pageNumberById}
+            coverPageId={kdpExportPage.coverPageId}
+            design={kdpExportPage.design}
             onReady={handleKdpCanvasReady}
           />
         )}

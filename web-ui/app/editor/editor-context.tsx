@@ -14,11 +14,13 @@ import {
 import type {
   EditorElement,
   EditorPage,
+  ArtworkEditorElement,
   ColoringPageImage,
   ArtworkElementUpdates,
   ImageEditorElement,
   ImageElementUpdates,
   ImageFilterSettings,
+  BookDesignSettings,
   LineCapStyle,
   LineStyle,
   MazeCellWalls,
@@ -31,6 +33,9 @@ import type {
   ShapeEditorElement,
   ShapeElementUpdates,
   ShapeType,
+  PageBorderStyle,
+  PageNumberPosition,
+  RepeatingDesignElement,
   SpreadMode,
   SudokuDifficulty,
   SudokuEditorElement,
@@ -67,6 +72,25 @@ const defaultImageFilters: ImageFilterSettings = {
   blur: 0,
   hueRotation: 0,
 };
+const defaultBookDesign: BookDesignSettings = {
+  pageNumbers: {
+    enabled: false,
+    format: "arabic",
+    position: "bottom-outer",
+    fontFamily: "serif",
+    fontSize: 10,
+    color: "#59655e",
+  },
+  pageBorder: {
+    enabled: false,
+    style: "solid",
+    inset: 4,
+    width: 1,
+    color: "#59655e",
+  },
+  excludedPageIds: [],
+  elements: [],
+};
 const defaultDocument: EditorDocument = {
   bookName: "Untitled Book",
   pages: [{ id: "page-1", title: "Page 1", elements: [] }],
@@ -75,6 +99,7 @@ const defaultDocument: EditorDocument = {
   bleedEnabled: false,
   zoom: "Fit",
   spreadMode: "single",
+  design: defaultBookDesign,
 };
 
 const textDefaults: Record<
@@ -156,6 +181,7 @@ type EditorDocument = {
   bleedEnabled: boolean;
   zoom: ZoomLevel;
   spreadMode: SpreadMode;
+  design: BookDesignSettings;
 };
 
 type StorageSnapshot = {
@@ -209,6 +235,15 @@ type EditorContextValue = EditorDocument & {
     updates: WordSearchWordsElementUpdates,
   ) => void;
   updateMazeElement: (elementId: string, updates: MazeElementUpdates) => void;
+  setBookDesign: (design: BookDesignSettings) => void;
+  addDesignTextElement: () => string;
+  addDesignShapeElement: (shapeType: ShapeType) => string;
+  addDesignArtworkElement: (artKey: string) => string;
+  updateDesignElement: (
+    elementId: string,
+    element: RepeatingDesignElement,
+  ) => void;
+  deleteDesignElement: (elementId: string) => void;
   setSudokuDifficulty: (
     elementId: string,
     difficulty: SudokuDifficulty,
@@ -632,6 +667,129 @@ export function EditorProvider({
           ),
         });
         selectElement(element.id);
+      },
+      setBookDesign: (design) =>
+        saveDocument({ ...document, design }),
+      addDesignTextElement: () => {
+        const textStyle: TextStyle = "body";
+        const defaults = textDefaults[textStyle];
+        const element: TextEditorElement = {
+          id: crypto.randomUUID(),
+          kind: "text",
+          textStyle,
+          content: "Your repeated text",
+          fontFamily: defaults.fontFamily,
+          fontSize: defaults.fontSize,
+          color: defaults.color,
+          backgroundColor: null,
+          rotation: 0,
+          lineSpacing: 6,
+          tracking: 0,
+          bold: defaults.bold,
+          italic: defaults.italic,
+          alignment: "left",
+          lineHeight: 1.45,
+          x: 8,
+          y: 8,
+          width: 34,
+          height: 10,
+          zIndex:
+            Math.max(-1, ...document.design.elements.map((item) => item.zIndex)) +
+            1,
+        };
+        saveDocument({
+          ...document,
+          design: {
+            ...document.design,
+            elements: [...document.design.elements, element],
+          },
+        });
+        return element.id;
+      },
+      addDesignShapeElement: (shapeType) => {
+        if (!SHAPE_TYPES.includes(shapeType)) {
+          throw new Error("Choose a supported shape.");
+        }
+        const isLine = shapeType === "line";
+        const element: ShapeEditorElement = {
+          id: crypto.randomUUID(),
+          kind: "shape",
+          shapeType,
+          lineStyle: "thin",
+          lineCap: "round",
+          fillColor: "#dce6d8",
+          outlineColor: null,
+          outlineWidth: isLine ? 1 : 2,
+          rotation: 0,
+          cornerRadius: 0,
+          starPoints: 5,
+          pentagonSides: 5,
+          x: 8,
+          y: 8,
+          width: 22,
+          height: isLine ? 8 : 22,
+          zIndex:
+            Math.max(-1, ...document.design.elements.map((item) => item.zIndex)) +
+            1,
+        };
+        saveDocument({
+          ...document,
+          design: {
+            ...document.design,
+            elements: [...document.design.elements, element],
+          },
+        });
+        return element.id;
+      },
+      addDesignArtworkElement: (artKey) => {
+        if (!ART_LIBRARY.some((artwork) => artwork.key === artKey)) {
+          throw new Error("Choose a supported artwork.");
+        }
+        const element: ArtworkEditorElement = {
+          id: crypto.randomUUID(),
+          kind: "artwork",
+          artKey,
+          strokeColor: "#1e293b",
+          strokeWidth: 1.8,
+          rotation: 0,
+          x: 8,
+          y: 8,
+          width: 22,
+          height: 22,
+          zIndex:
+            Math.max(-1, ...document.design.elements.map((item) => item.zIndex)) +
+            1,
+        };
+        saveDocument({
+          ...document,
+          design: {
+            ...document.design,
+            elements: [...document.design.elements, element],
+          },
+        });
+        return element.id;
+      },
+      updateDesignElement: (elementId, updatedElement) => {
+        saveDocument({
+          ...document,
+          design: {
+            ...document.design,
+            elements: document.design.elements.map((element) =>
+              element.id === elementId ? updatedElement : element,
+            ),
+          },
+        });
+      },
+      deleteDesignElement: (elementId) => {
+        saveDocument({
+          ...document,
+          design: {
+            ...document.design,
+            elements: document.design.elements.filter(
+              (element) => element.id !== elementId,
+            ),
+          },
+        });
       },
       addSudokuPages: async (squares, difficulty, pageCount) => {
         if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) {
@@ -1349,8 +1507,84 @@ function normalizeDocument(value: unknown): EditorDocument | null {
         ? value.zoom
         : "Fit",
     spreadMode: value.spreadMode === "spread" ? "spread" : "single",
+    design: normalizeBookDesign(value.design, pages),
   };
   return isEditorDocument(document) ? document : null;
+}
+
+function normalizeBookDesign(
+  value: unknown,
+  pages: EditorPage[],
+): BookDesignSettings {
+  const design = isRecord(value) ? value : {};
+  const pageNumbers = isRecord(design.pageNumbers) ? design.pageNumbers : {};
+  const pageBorder = isRecord(design.pageBorder) ? design.pageBorder : {};
+  const pageIds = new Set(pages.map((page) => page.id));
+  const elementIds = new Set(
+    pages.flatMap((page) => page.elements.map((element) => element.id)),
+  );
+  const elements: RepeatingDesignElement[] = [];
+
+  if (Array.isArray(design.elements)) {
+    for (const [index, elementValue] of design.elements.entries()) {
+      const element = normalizeElement(elementValue, index);
+      if (
+        element &&
+        (element.kind === "text" ||
+          element.kind === "shape" ||
+          element.kind === "artwork") &&
+        !elementIds.has(element.id)
+      ) {
+        elementIds.add(element.id);
+        elements.push(element);
+      }
+    }
+  }
+
+  return {
+    pageNumbers: {
+      enabled: pageNumbers.enabled === true,
+      format:
+        pageNumbers.format === "roman-lower" ||
+        pageNumbers.format === "roman-upper"
+          ? pageNumbers.format
+          : "arabic",
+      position: isPageNumberPosition(pageNumbers.position)
+        ? pageNumbers.position
+        : defaultBookDesign.pageNumbers.position,
+      fontFamily: isTextFontFamily(pageNumbers.fontFamily)
+        ? pageNumbers.fontFamily
+        : defaultBookDesign.pageNumbers.fontFamily,
+      fontSize: isFiniteNumber(pageNumbers.fontSize)
+        ? clamp(pageNumbers.fontSize, 6, 48)
+        : defaultBookDesign.pageNumbers.fontSize,
+      color: isHexColor(pageNumbers.color)
+        ? pageNumbers.color
+        : defaultBookDesign.pageNumbers.color,
+    },
+    pageBorder: {
+      enabled: pageBorder.enabled === true,
+      style: isPageBorderStyle(pageBorder.style)
+        ? pageBorder.style
+        : defaultBookDesign.pageBorder.style,
+      inset: isFiniteNumber(pageBorder.inset)
+        ? clamp(pageBorder.inset, 1, 15)
+        : defaultBookDesign.pageBorder.inset,
+      width: isFiniteNumber(pageBorder.width)
+        ? clamp(pageBorder.width, 1, 8)
+        : defaultBookDesign.pageBorder.width,
+      color: isHexColor(pageBorder.color)
+        ? pageBorder.color
+        : defaultBookDesign.pageBorder.color,
+    },
+    excludedPageIds: Array.isArray(design.excludedPageIds)
+      ? design.excludedPageIds.filter(
+          (pageId): pageId is string =>
+            typeof pageId === "string" && pageIds.has(pageId),
+        )
+      : [],
+    elements,
+  };
 }
 
 function normalizeElement(value: unknown, index: number): EditorElement | null {
@@ -1766,6 +2000,64 @@ function isEditorDocument(value: unknown): value is EditorDocument {
       value.zoom === "100%" ||
       value.zoom === "Fit") &&
     (value.spreadMode === "single" || value.spreadMode === "spread")
+    && isBookDesignSettings(value.design)
+  );
+}
+
+function isBookDesignSettings(value: unknown): value is BookDesignSettings {
+  return (
+    isRecord(value) &&
+    isRecord(value.pageNumbers) &&
+    typeof value.pageNumbers.enabled === "boolean" &&
+    (value.pageNumbers.format === "arabic" ||
+      value.pageNumbers.format === "roman-lower" ||
+      value.pageNumbers.format === "roman-upper") &&
+    isPageNumberPosition(value.pageNumbers.position) &&
+    isTextFontFamily(value.pageNumbers.fontFamily) &&
+    isFiniteNumber(value.pageNumbers.fontSize) &&
+    value.pageNumbers.fontSize >= 6 &&
+    value.pageNumbers.fontSize <= 48 &&
+    isHexColor(value.pageNumbers.color) &&
+    isRecord(value.pageBorder) &&
+    typeof value.pageBorder.enabled === "boolean" &&
+    isPageBorderStyle(value.pageBorder.style) &&
+    isFiniteNumber(value.pageBorder.inset) &&
+    value.pageBorder.inset >= 1 &&
+    value.pageBorder.inset <= 15 &&
+    isFiniteNumber(value.pageBorder.width) &&
+    value.pageBorder.width >= 1 &&
+    value.pageBorder.width <= 8 &&
+    isHexColor(value.pageBorder.color) &&
+    Array.isArray(value.excludedPageIds) &&
+    value.excludedPageIds.every((pageId) => typeof pageId === "string") &&
+    Array.isArray(value.elements) &&
+    value.elements.every(
+      (element) =>
+        isEditorElement(element) &&
+        (element.kind === "text" ||
+          element.kind === "shape" ||
+          element.kind === "artwork"),
+    )
+  );
+}
+
+function isPageNumberPosition(value: unknown): value is PageNumberPosition {
+  return (
+    value === "top-outer" ||
+    value === "top-inner" ||
+    value === "top-center" ||
+    value === "bottom-outer" ||
+    value === "bottom-inner" ||
+    value === "bottom-center"
+  );
+}
+
+function isPageBorderStyle(value: unknown): value is PageBorderStyle {
+  return (
+    value === "solid" ||
+    value === "dashed" ||
+    value === "dotted" ||
+    value === "double"
   );
 }
 
