@@ -213,7 +213,10 @@ type EditorContextValue = EditorDocument & {
     elementId: string,
     difficulty: SudokuDifficulty,
   ) => void;
-  moveElement: (elementId: string, position: { x: number; y: number }) => void;
+  moveElement: (
+    elementId: string,
+    position: { x: number; y: number; pageId?: string },
+  ) => void;
   rotateElement: (elementId: string, rotation: number) => void;
   resizeElement: (
     elementId: string,
@@ -290,22 +293,38 @@ export function EditorProvider({
     revision: number;
   } | null>(null);
   const documentRef = useRef(parsed.document);
+  const serializedDocumentRef = useRef<string | null>(null);
+  if (serializedDocumentRef.current === null) {
+    serializedDocumentRef.current = JSON.stringify(parsed.document);
+  }
   const saveRevisionRef = useRef(0);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [selectedElementId, selectElement] = useState<string | null>(null);
   const document = parsed.document;
   const saveDocument = useCallback((nextDocument: EditorDocument) => {
+    const serializedDocument = JSON.stringify(nextDocument);
+    if (serializedDocument === serializedDocumentRef.current) return;
     saveRevisionRef.current += 1;
     documentRef.current = nextDocument;
+    serializedDocumentRef.current = serializedDocument;
     setSnapshot({
       ready: false,
-      value: JSON.stringify(nextDocument),
+      value: serializedDocument,
       error: null,
     });
     setPendingSave({
       document: nextDocument,
       revision: saveRevisionRef.current,
     });
+  }, []);
+  const updateDocumentState = useCallback((nextDocument: EditorDocument) => {
+    const serializedDocument = JSON.stringify(nextDocument);
+    documentRef.current = nextDocument;
+    serializedDocumentRef.current = serializedDocument;
+    setSnapshot((current) => ({
+      ...current,
+      value: serializedDocument,
+    }));
   }, []);
   const getCurrentDocument = useCallback(() => documentRef.current, []);
 
@@ -316,10 +335,7 @@ export function EditorProvider({
       saveQueueRef.current = saveQueueRef.current
         .then(async () => {
           if (saveRevisionRef.current !== pendingSave.revision) return;
-          const result = await saveBookDataAction(
-            bookId,
-            pendingSave.document,
-          );
+          const result = await saveBookDataAction(bookId, pendingSave.document);
           if (saveRevisionRef.current !== pendingSave.revision) return;
           if (result.status === "error") {
             setSnapshot((current) => ({
@@ -346,7 +362,7 @@ export function EditorProvider({
             error: errorMessage(error),
           }));
         });
-    }, 1000);
+    }, 2500);
 
     return () => clearTimeout(timeout);
   }, [bookId, pendingSave]);
@@ -373,7 +389,9 @@ export function EditorProvider({
       saveError,
       selectPage: (pageId) => {
         if (document.pages.some((page) => page.id === pageId)) {
-          saveDocument({ ...document, currentPageId: pageId });
+          if (pageId !== document.currentPageId) {
+            updateDocumentState({ ...document, currentPageId: pageId });
+          }
           selectElement(null);
         }
       },
@@ -890,25 +908,27 @@ export function EditorProvider({
         selectElement(null);
       },
       deleteElement: (elementId) => {
-        if (!currentPage.elements.some((element) => element.id === elementId))
+        if (
+          !document.pages.some((page) =>
+            page.elements.some((element) => element.id === elementId),
+          )
+        )
           return;
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.filter((element) => element.id !== elementId),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.filter((element) => element.id !== elementId),
           ),
         });
         if (selectedElementId === elementId) selectElement(null);
       },
       updateTextContent: (elementId, content) => {
+        const currentDocument = getCurrentDocument();
         saveDocument({
-          ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
+          ...currentDocument,
+          pages: updateElementPage(
+            currentDocument.pages,
+            elementId,
             (elements) =>
               elements.map((element) =>
                 element.id === elementId && element.kind === "text"
@@ -921,191 +941,170 @@ export function EditorProvider({
       updateShapeElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (element.id !== elementId || element.kind !== "shape")
-                  return element;
-                const updated = { ...element, ...updates };
-                return {
-                  ...updated,
-                  width: Math.max(0.1, updated.width),
-                  height: Math.max(0.1, updated.height),
-                  rotation: clamp(updated.rotation, -180, 180),
-                  outlineWidth: clamp(updated.outlineWidth, 0, 20),
-                  cornerRadius: clamp(updated.cornerRadius, 0, 50),
-                  starPoints: Math.round(clamp(updated.starPoints, 3, 24)),
-                  pentagonSides: Math.round(
-                    clamp(updated.pentagonSides, 3, 12),
-                  ),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (element.id !== elementId || element.kind !== "shape")
+                return element;
+              const updated = { ...element, ...updates };
+              return {
+                ...updated,
+                width: Math.max(0.1, updated.width),
+                height: Math.max(0.1, updated.height),
+                rotation: clamp(updated.rotation, -180, 180),
+                outlineWidth: clamp(updated.outlineWidth, 0, 20),
+                cornerRadius: clamp(updated.cornerRadius, 0, 50),
+                starPoints: Math.round(clamp(updated.starPoints, 3, 24)),
+                pentagonSides: Math.round(clamp(updated.pentagonSides, 3, 12)),
+              };
+            }),
           ),
         });
       },
       updateArtworkElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (element.id !== elementId || element.kind !== "artwork")
-                  return element;
-                const updated = { ...element, ...updates };
-                return {
-                  ...updated,
-                  width: Math.max(0.1, updated.width),
-                  height: Math.max(0.1, updated.height),
-                  strokeWidth: clamp(updated.strokeWidth, 0, 20),
-                  rotation: clamp(updated.rotation, -180, 180),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (element.id !== elementId || element.kind !== "artwork")
+                return element;
+              const updated = { ...element, ...updates };
+              return {
+                ...updated,
+                width: Math.max(0.1, updated.width),
+                height: Math.max(0.1, updated.height),
+                strokeWidth: clamp(updated.strokeWidth, 0, 20),
+                rotation: clamp(updated.rotation, -180, 180),
+              };
+            }),
           ),
         });
       },
       updateImageElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (element.id !== elementId || element.kind !== "image")
-                  return element;
-                const updated = { ...element, ...updates };
-                return {
-                  ...updated,
-                  width: Math.max(0.1, updated.width),
-                  height: Math.max(0.1, updated.height),
-                  borderColor: isHexColor(updated.borderColor)
-                    ? updated.borderColor
-                    : "#1e293b",
-                  borderWidth: clamp(updated.borderWidth, 0, 20),
-                  borderRadius: clamp(updated.borderRadius, 0, 100),
-                  opacity: clamp(updated.opacity, 0, 100),
-                  rotation: clamp(updated.rotation, -180, 180),
-                  filters: normalizeImageFilters(updated.filters),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (element.id !== elementId || element.kind !== "image")
+                return element;
+              const updated = { ...element, ...updates };
+              return {
+                ...updated,
+                width: Math.max(0.1, updated.width),
+                height: Math.max(0.1, updated.height),
+                borderColor: isHexColor(updated.borderColor)
+                  ? updated.borderColor
+                  : "#1e293b",
+                borderWidth: clamp(updated.borderWidth, 0, 20),
+                borderRadius: clamp(updated.borderRadius, 0, 100),
+                opacity: clamp(updated.opacity, 0, 100),
+                rotation: clamp(updated.rotation, -180, 180),
+                filters: normalizeImageFilters(updated.filters),
+              };
+            }),
           ),
         });
       },
       updateSudokuElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (element.id !== elementId || element.kind !== "sudoku")
-                  return element;
-                const updated = { ...element, ...updates };
-                return {
-                  ...updated,
-                  x: clamp(updated.x, 0, 100),
-                  y: clamp(updated.y, 0, 100),
-                  width: Math.max(0.1, updated.width),
-                  height: Math.max(0.1, updated.height),
-                  color: isHexColor(updated.color) ? updated.color : "#2b4736",
-                  numberSize: clamp(updated.numberSize, 4, 48),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (element.id !== elementId || element.kind !== "sudoku")
+                return element;
+              const updated = { ...element, ...updates };
+              return {
+                ...updated,
+                x: clamp(updated.x, 0, 100),
+                y: clamp(updated.y, 0, 100),
+                width: Math.max(0.1, updated.width),
+                height: Math.max(0.1, updated.height),
+                color: isHexColor(updated.color) ? updated.color : "#2b4736",
+                numberSize: clamp(updated.numberSize, 4, 48),
+              };
+            }),
           ),
         });
       },
       updateWordSearchGridElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (element.id !== elementId || element.kind !== "word-search")
-                  return element;
-                return {
-                  ...element,
-                  letterSize: clamp(
-                    updates.letterSize ?? element.letterSize,
-                    4,
-                    48,
-                  ),
-                  lineWeight: clamp(
-                    updates.lineWeight ?? element.lineWeight,
-                    0.5,
-                    8,
-                  ),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (element.id !== elementId || element.kind !== "word-search")
+                return element;
+              return {
+                ...element,
+                letterSize: clamp(
+                  updates.letterSize ?? element.letterSize,
+                  4,
+                  48,
+                ),
+                lineWeight: clamp(
+                  updates.lineWeight ?? element.lineWeight,
+                  0.5,
+                  8,
+                ),
+              };
+            }),
           ),
         });
       },
       updateWordSearchWordsElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (
-                  element.id !== elementId ||
-                  element.kind !== "word-search-words"
-                ) {
-                  return element;
-                }
-                return {
-                  ...element,
-                  ...updates,
-                  fontSize: clamp(updates.fontSize ?? element.fontSize, 4, 72),
-                  spacing: clamp(updates.spacing ?? element.spacing, -2, 12),
-                  lineSpacing: clamp(
-                    updates.lineSpacing ?? element.lineSpacing,
-                    0,
-                    24,
-                  ),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (
+                element.id !== elementId ||
+                element.kind !== "word-search-words"
+              ) {
+                return element;
+              }
+              return {
+                ...element,
+                ...updates,
+                fontSize: clamp(updates.fontSize ?? element.fontSize, 4, 72),
+                spacing: clamp(updates.spacing ?? element.spacing, -2, 12),
+                lineSpacing: clamp(
+                  updates.lineSpacing ?? element.lineSpacing,
+                  0,
+                  24,
+                ),
+              };
+            }),
           ),
         });
       },
       updateMazeElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) =>
-                element.id === elementId && element.kind === "maze"
-                  ? {
-                      ...element,
-                      x: clamp(updates.x ?? element.x, 0, 100),
-                      y: clamp(updates.y ?? element.y, 0, 100),
-                      width: Math.max(0.1, updates.width ?? element.width),
-                      height: Math.max(0.1, updates.height ?? element.height),
-                      lineWeight: clamp(
-                        updates.lineWeight ?? element.lineWeight,
-                        0.5,
-                        8,
-                      ),
-                    }
-                  : element,
-              ),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) =>
+              element.id === elementId && element.kind === "maze"
+                ? {
+                    ...element,
+                    x: clamp(updates.x ?? element.x, 0, 100),
+                    y: clamp(updates.y ?? element.y, 0, 100),
+                    width: Math.max(0.1, updates.width ?? element.width),
+                    height: Math.max(0.1, updates.height ?? element.height),
+                    lineWeight: clamp(
+                      updates.lineWeight ?? element.lineWeight,
+                      0.5,
+                      8,
+                    ),
+                  }
+                : element,
+            ),
           ),
         });
       },
       setSudokuDifficulty: (elementId, difficulty) => {
-        const element = currentPage.elements.find(
-          (candidate): candidate is SudokuEditorElement =>
-            candidate.id === elementId && candidate.kind === "sudoku",
-        );
+        const element = document.pages
+          .flatMap((page) => page.elements)
+          .find(
+            (candidate): candidate is SudokuEditorElement =>
+              candidate.id === elementId && candidate.kind === "sudoku",
+          );
         if (!element || element.difficulty === difficulty) return;
         const data = updateSudokuDifficulty(
           element.puzzle,
@@ -1114,100 +1113,82 @@ export function EditorProvider({
         );
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((candidate) =>
-                candidate.id === elementId && candidate.kind === "sudoku"
-                  ? {
-                      ...candidate,
-                      difficulty,
-                      ...data,
-                      puzzle: candidate.isSolution
-                        ? [...candidate.solution]
-                        : data.puzzle,
-                      hiddenSquares: candidate.isSolution
-                        ? 0
-                        : data.hiddenSquares,
-                    }
-                  : candidate,
-              ),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((candidate) =>
+              candidate.id === elementId && candidate.kind === "sudoku"
+                ? {
+                    ...candidate,
+                    difficulty,
+                    ...data,
+                    puzzle: candidate.isSolution
+                      ? [...candidate.solution]
+                      : data.puzzle,
+                    hiddenSquares: candidate.isSolution
+                      ? 0
+                      : data.hiddenSquares,
+                  }
+                : candidate,
+            ),
           ),
         });
       },
       updateTextElement: (elementId, updates) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) =>
-                element.id === elementId && element.kind === "text"
-                  ? { ...element, ...updates }
-                  : element,
-              ),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) =>
+              element.id === elementId && element.kind === "text"
+                ? { ...element, ...updates }
+                : element,
+            ),
           ),
         });
       },
       moveElement: (elementId, position) => {
+        const currentDocument = getCurrentDocument();
         saveDocument({
-          ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) =>
-                element.id === elementId
-                  ? { ...element, x: position.x, y: position.y }
-                  : element,
-              ),
+          ...currentDocument,
+          pages: moveElementBetweenPages(
+            currentDocument.pages,
+            elementId,
+            position,
           ),
         });
       },
       rotateElement: (elementId, rotation) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) =>
-                element.id === elementId && "rotation" in element
-                  ? { ...element, rotation: clamp(rotation, -180, 180) }
-                  : element,
-              ),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) =>
+              element.id === elementId && "rotation" in element
+                ? { ...element, rotation: clamp(rotation, -180, 180) }
+                : element,
+            ),
           ),
         });
       },
       resizeElement: (elementId, size) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) =>
-              elements.map((element) => {
-                if (element.id !== elementId) return element;
-                return {
-                  ...element,
-                  x: size.x,
-                  y: size.y,
-                  width: Math.max(0.1, size.width),
-                  height: Math.max(0.1, size.height),
-                };
-              }),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            elements.map((element) => {
+              if (element.id !== elementId) return element;
+              return {
+                ...element,
+                x: size.x,
+                y: size.y,
+                width: Math.max(0.1, size.width),
+                height: Math.max(0.1, size.height),
+              };
+            }),
           ),
         });
       },
       reorderElement: (elementId, direction) => {
         saveDocument({
           ...document,
-          pages: updatePageElements(
-            document.pages,
-            currentPage.id,
-            (elements) => reorderElements(elements, elementId, direction),
+          pages: updateElementPage(document.pages, elementId, (elements) =>
+            reorderElements(elements, elementId, direction),
           ),
         });
       },
@@ -1223,10 +1204,10 @@ export function EditorProvider({
           document.pages.length - 1,
           Math.max(0, currentPageIndex + direction),
         );
-        saveDocument({
-          ...document,
-          currentPageId: document.pages[nextIndex].id,
-        });
+        const nextPageId = document.pages[nextIndex].id;
+        if (nextPageId !== document.currentPageId) {
+          updateDocumentState({ ...document, currentPageId: nextPageId });
+        }
         selectElement(null);
       },
     }),
@@ -1238,6 +1219,7 @@ export function EditorProvider({
       saveStatus,
       selectedElementId,
       getCurrentDocument,
+      updateDocumentState,
       saveDocument,
     ],
   );
@@ -1415,7 +1397,9 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
         : defaults.fontSize,
       color: typeof value.color === "string" ? value.color : defaults.color,
       backgroundColor:
-        typeof value.backgroundColor === "string" ? value.backgroundColor : null,
+        typeof value.backgroundColor === "string"
+          ? value.backgroundColor
+          : null,
       rotation: isFiniteNumber(value.rotation)
         ? clamp(value.rotation, -180, 180)
         : 0,
@@ -1679,6 +1663,69 @@ function updatePageElements(
   return pages.map((page) =>
     page.id === pageId ? { ...page, elements: update(page.elements) } : page,
   );
+}
+
+function updateElementPage(
+  pages: EditorPage[],
+  elementId: string,
+  update: (elements: EditorElement[]) => EditorElement[],
+) {
+  const page = pages.find((candidate) =>
+    candidate.elements.some((element) => element.id === elementId),
+  );
+  return page ? updatePageElements(pages, page.id, update) : pages;
+}
+
+function moveElementBetweenPages(
+  pages: EditorPage[],
+  elementId: string,
+  position: { x: number; y: number; pageId?: string },
+) {
+  const sourcePage = pages.find((page) =>
+    page.elements.some((element) => element.id === elementId),
+  );
+  const targetPage = position.pageId
+    ? pages.find((page) => page.id === position.pageId)
+    : sourcePage;
+  const element = sourcePage?.elements.find(
+    (candidate) => candidate.id === elementId,
+  );
+  if (!sourcePage || !targetPage || !element) return pages;
+
+  if (sourcePage.id === targetPage.id) {
+    return updatePageElements(pages, sourcePage.id, (elements) =>
+      elements.map((candidate) =>
+        candidate.id === elementId
+          ? { ...candidate, x: position.x, y: position.y }
+          : candidate,
+      ),
+    );
+  }
+
+  const topLayer = Math.max(
+    -1,
+    ...targetPage.elements.map((candidate) => candidate.zIndex),
+  );
+  return pages.map((page) => {
+    if (page.id === sourcePage.id) {
+      return {
+        ...page,
+        elements: page.elements.filter(
+          (candidate) => candidate.id !== elementId,
+        ),
+      };
+    }
+    if (page.id === targetPage.id) {
+      return {
+        ...page,
+        elements: [
+          ...page.elements,
+          { ...element, x: position.x, y: position.y, zIndex: topLayer + 1 },
+        ],
+      };
+    }
+    return page;
+  });
 }
 
 function reorderElements(

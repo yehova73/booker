@@ -10,6 +10,7 @@ import { PageThumbnail } from "./page-thumbnail";
 type PagesFooterProps = {
   pages: EditorPage[];
   currentPageId: string;
+  inViewPageIds: string[];
   onSelectPage: (pageId: string) => void;
   onAddPage: () => void;
   onClonePage: (pageId: string) => void;
@@ -23,6 +24,7 @@ type PagesFooterProps = {
 export function PagesFooter({
   pages,
   currentPageId,
+  inViewPageIds,
   onSelectPage,
   onAddPage,
   onClonePage,
@@ -90,6 +92,7 @@ export function PagesFooter({
               page={page}
               pageNumber={index + 1}
               selected={page.id === currentPageId}
+              inSpread={inViewPageIds.includes(page.id)}
               onClick={() => onSelectPage(page.id)}
               onClone={() => onClonePage(page.id)}
               onDelete={() => onDeletePage(page.id)}

@@ -25,7 +25,7 @@ type CanvasElementProps = {
   selected: boolean;
   overlayTarget: HTMLDivElement | null;
   onSelect: () => void;
-  onMove: (position: { x: number; y: number }) => void;
+  onMove: (position: { x: number; y: number; pageId?: string }) => void;
   onResize: (size: Geometry) => void;
   onRotate: (rotation: number) => void;
   onUpdateText: (content: string) => void;
@@ -38,6 +38,9 @@ type DragStart = Geometry & {
   pointerY: number;
   pageWidth: number;
   pageHeight: number;
+  pageId: string;
+  pointerOffsetX: number;
+  pointerOffsetY: number;
   mode: "move" | "resize" | "rotate";
   resizeHandle: ResizeHandle | null;
   rotation: number;
@@ -115,7 +118,13 @@ export function CanvasElement({
   const [previewGeometry, setPreviewGeometry] = useState<Geometry | null>(null);
   const [previewRotation, setPreviewRotation] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
+  const editingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
+  const previewFrameRef = useRef<number | null>(null);
+  const pendingPreviewRef = useRef<{
+    geometry: Geometry | null;
+    rotation: number | null;
+  } | null>(null);
   const dragStart = useRef<DragStart | null>(null);
   const latestGeometry = useRef<Geometry>({
     x: element.x,
@@ -136,10 +145,42 @@ export function CanvasElement({
     }
   }, [editing]);
 
+  useEffect(
+    () => () => {
+      if (previewFrameRef.current !== null) {
+        cancelAnimationFrame(previewFrameRef.current);
+      }
+    },
+    [],
+  );
+
   const visibleGeometry = previewGeometry ?? element;
 
+  function schedulePreview(geometry: Geometry | null, rotation: number | null) {
+    pendingPreviewRef.current = { geometry, rotation };
+    if (previewFrameRef.current !== null) return;
+
+    previewFrameRef.current = requestAnimationFrame(() => {
+      previewFrameRef.current = null;
+      const preview = pendingPreviewRef.current;
+      pendingPreviewRef.current = null;
+      if (!preview) return;
+      setPreviewGeometry(preview.geometry);
+      setPreviewRotation(preview.rotation);
+    });
+  }
+
+  function finishTextEditing() {
+    if (!editingRef.current || element.kind !== "text") return;
+    editingRef.current = false;
+    const content = textRef.current?.innerText ?? element.content;
+    if (textRef.current) textRef.current.textContent = "";
+    if (content !== editStartContent.current) onUpdateText(content);
+    setEditing(false);
+  }
+
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || editing) return;
+    if (event.button !== 0) return;
     const page =
       event.currentTarget.closest<HTMLElement>("[data-page-canvas]") ??
       overlayTarget?.parentElement?.querySelector<HTMLElement>(
@@ -177,6 +218,13 @@ export function CanvasElement({
       pointerY: event.clientY,
       pageWidth: bounds.width,
       pageHeight: bounds.height,
+      pageId: page?.dataset.pageId ?? "",
+      pointerOffsetX:
+        event.clientX -
+        (bounds.left + (visibleGeometry.x / 100) * bounds.width),
+      pointerOffsetY:
+        event.clientY -
+        (bounds.top + (visibleGeometry.y / 100) * bounds.height),
       mode: rotateElement ? "rotate" : resizeHandle ? "resize" : "move",
       resizeHandle,
       rotation,
@@ -194,6 +242,17 @@ export function CanvasElement({
     const start = dragStart.current;
     if (!start) return;
 
+    if (editingRef.current) {
+      const distance = Math.hypot(
+        event.clientX - start.pointerX,
+        event.clientY - start.pointerY,
+      );
+      if (distance < 4) return;
+      event.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      finishTextEditing();
+    }
+
     if (start.mode === "rotate") {
       const currentAngle = Math.atan2(
         event.clientY - start.centerY,
@@ -203,7 +262,7 @@ export function CanvasElement({
         ((currentAngle - start.pointerAngle) * 180) / Math.PI,
       );
       latestRotation.current = clamp(start.rotation + delta, -180, 180);
-      setPreviewRotation(latestRotation.current);
+      schedulePreview(null, latestRotation.current);
       return;
     }
 
@@ -218,23 +277,72 @@ export function CanvasElement({
             y: start.y + dy,
           };
     latestGeometry.current = next;
-    setPreviewGeometry(next);
+    schedulePreview(next, null);
   }
 
-  function handlePointerUp() {
-    if (!dragStart.current) return;
-    if (dragStart.current.mode === "rotate") {
-      onRotate(latestRotation.current);
-    } else if (dragStart.current.mode === "resize") {
-      onResize({
-        x: latestGeometry.current.x,
-        y: latestGeometry.current.y,
-        width: latestGeometry.current.width,
-        height: latestGeometry.current.height,
-      });
+  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const start = dragStart.current;
+    if (!start) return;
+    if (start.mode === "rotate") {
+      if (latestRotation.current !== start.rotation) {
+        onRotate(latestRotation.current);
+      }
+    } else if (start.mode === "resize") {
+      const geometry = latestGeometry.current;
+      if (
+        geometry.x !== start.x ||
+        geometry.y !== start.y ||
+        geometry.width !== start.width ||
+        geometry.height !== start.height
+      ) {
+        onResize({
+          x: geometry.x,
+          y: geometry.y,
+          width: geometry.width,
+          height: geometry.height,
+        });
+      }
     } else {
-      onMove({ x: latestGeometry.current.x, y: latestGeometry.current.y });
+      const targetPage = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-page-canvas]"),
+      ).find((page) => {
+        const bounds = page.getBoundingClientRect();
+        return (
+          event.clientX >= bounds.left &&
+          event.clientX <= bounds.right &&
+          event.clientY >= bounds.top &&
+          event.clientY <= bounds.bottom
+        );
+      });
+      const targetBounds = targetPage?.getBoundingClientRect();
+      if (
+        targetPage &&
+        targetBounds &&
+        targetPage.dataset.pageId !== start.pageId
+      ) {
+        onMove({
+          x:
+            ((event.clientX - start.pointerOffsetX - targetBounds.left) /
+              targetBounds.width) *
+            100,
+          y:
+            ((event.clientY - start.pointerOffsetY - targetBounds.top) /
+              targetBounds.height) *
+            100,
+          pageId: targetPage.dataset.pageId,
+        });
+      } else if (
+        latestGeometry.current.x !== start.x ||
+        latestGeometry.current.y !== start.y
+      ) {
+        onMove({ x: latestGeometry.current.x, y: latestGeometry.current.y });
+      }
     }
+    if (previewFrameRef.current !== null) {
+      cancelAnimationFrame(previewFrameRef.current);
+      previewFrameRef.current = null;
+    }
+    pendingPreviewRef.current = null;
     dragStart.current = null;
     setPreviewGeometry(null);
     setPreviewRotation(null);
@@ -279,6 +387,7 @@ export function CanvasElement({
       onDoubleClick={() => {
         if (element.kind === "text") {
           editStartContent.current = element.content;
+          editingRef.current = true;
           onSelect();
           setEditing(true);
         }
@@ -322,12 +431,7 @@ export function CanvasElement({
             lineHeight: element.lineHeight,
             textAlign: element.alignment,
           }}
-          onBlur={() => {
-            const content = textRef.current?.innerText ?? element.content;
-            if (content !== element.content) onUpdateText(content);
-            setEditing(false);
-          }}
-          onInput={(event) => onUpdateText(event.currentTarget.innerText)}
+          onBlur={finishTextEditing}
           suppressContentEditableWarning
         >
           {editing

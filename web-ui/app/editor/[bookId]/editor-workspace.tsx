@@ -66,6 +66,26 @@ function EditorWorkspace({
   initialCoverPageId: string | null;
 }) {
   const editor = useEditorContext();
+  const currentPageIndex = editor.currentPageNumber - 1;
+  const spreadLeftIndex =
+    currentPageIndex === 0
+      ? -1
+      : currentPageIndex % 2 === 1
+        ? currentPageIndex
+        : currentPageIndex - 1;
+  const spreadPages: [EditorPage | null, EditorPage | null] = [
+    spreadLeftIndex >= 0 ? (editor.pages[spreadLeftIndex] ?? null) : null,
+    editor.pages[spreadLeftIndex + 1] ?? null,
+  ];
+  const spreadPageNumbers: [number | null, number | null] = [
+    spreadLeftIndex >= 0 ? spreadLeftIndex + 1 : null,
+    spreadLeftIndex + 1 < editor.pages.length
+      ? spreadLeftIndex + 2
+      : null,
+  ];
+  const spreadPageIds = spreadPages.flatMap((page) =>
+    page ? [page.id] : [],
+  );
   const [coloringDialogOpen, setColoringDialogOpen] = useState(false);
   const [uploadsDialogOpen, setUploadsDialogOpen] = useState(false);
   const [coverPageId, setCoverPageId] = useState(initialCoverPageId);
@@ -424,6 +444,8 @@ function EditorWorkspace({
               <MainArea
                 page={editor.currentPage}
                 pageNumber={editor.currentPageNumber}
+                spreadPages={spreadPages}
+                spreadPageNumbers={spreadPageNumbers}
                 selectedElementId={editor.selectedElementId}
                 trimPreset={editor.trimPreset}
                 bleedEnabled={editor.bleedEnabled}
@@ -448,6 +470,11 @@ function EditorWorkspace({
         <PagesFooter
           pages={editor.pages}
           currentPageId={editor.currentPageId}
+          inViewPageIds={
+            editor.spreadMode === "spread"
+              ? spreadPageIds
+              : [editor.currentPageId]
+          }
           onSelectPage={editor.selectPage}
           onAddPage={editor.addBlankPage}
           onClonePage={editor.clonePage}

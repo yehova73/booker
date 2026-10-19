@@ -8,10 +8,8 @@ import {
   Image as ImageIcon,
   Puzzle,
   Shapes,
-  Sparkles,
   Trash2,
   Type,
-  Upload,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -48,7 +46,11 @@ export function RightSidebar({
   onUploadsDialogOpenChange: (open: boolean) => void;
 }) {
   const editor = useEditorContext();
-  const layers = [...editor.currentPage.elements].sort(
+  const layerPage =
+    editor.pages.find((page) =>
+      page.elements.some((element) => element.id === editor.selectedElementId),
+    ) ?? editor.currentPage;
+  const layers = [...layerPage.elements].sort(
     (first, second) => second.zIndex - first.zIndex,
   );
   const selectedElement = layers.find(
@@ -85,7 +87,7 @@ export function RightSidebar({
                 <>
                   <div className="flex items-center justify-between">
                     <p className="text-[13px] font-semibold text-[#3d4b41]">
-                      {editor.currentPage.title}
+                      {layerPage.title}
                     </p>
                     <p className="mt-0.5 text-[11px] text-[#929b94]">
                       {layers.length}{" "}
@@ -233,37 +235,7 @@ export function RightSidebar({
             </div>
           </TabsContent>
 
-          <TabsContent
-            className="m-3 space-y-3 rounded-lg bg-[#f7f8f6] p-4 text-[11px] leading-relaxed text-[#879189]"
-            value="design"
-          >
-            <div>
-              <h3 className="text-xs font-semibold text-[#46534a]">
-                Coloring pages
-              </h3>
-              <p className="mt-1">
-                Create a page from your own images or preview mock AI-generated
-                ideas.
-              </p>
-            </div>
-            <Button
-              className="w-full justify-start"
-              onClick={() => onUploadsDialogOpenChange(true)}
-              type="button"
-              variant="outline"
-            >
-              <Upload />
-              Browse uploads
-            </Button>
-            <Button
-              className="w-full justify-start"
-              onClick={() => onColoringDialogOpenChange(true)}
-              type="button"
-            >
-              <Sparkles />
-              Create coloring pages
-            </Button>
-          </TabsContent>
+          <TabsContent className="" value="design"></TabsContent>
         </Tabs>
       </SidebarContent>
       <ColoringPageDialog

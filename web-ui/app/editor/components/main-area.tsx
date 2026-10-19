@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Frame } from "lucide-react";
+import { Check } from "lucide-react";
 
 import type {
   EditorElement,
@@ -15,13 +15,18 @@ import { CanvasElement } from "./canvas-element";
 type MainAreaProps = {
   page: EditorPage;
   pageNumber: number;
+  spreadPages: [EditorPage | null, EditorPage | null];
+  spreadPageNumbers: [number | null, number | null];
   selectedElementId: string | null;
   trimPreset: TrimPreset;
   bleedEnabled: boolean;
   zoom: ZoomLevel;
   spreadMode: SpreadMode;
   onSelectElement: (id: string | null) => void;
-  onMoveElement: (id: string, position: { x: number; y: number }) => void;
+  onMoveElement: (
+    id: string,
+    position: { x: number; y: number; pageId?: string },
+  ) => void;
   onResizeElement: (
     id: string,
     size: { x: number; y: number; width: number; height: number },
@@ -30,15 +35,11 @@ type MainAreaProps = {
   onUpdateText: (id: string, content: string) => void;
 };
 
-const trimDimensions: Record<TrimPreset, string> = {
-  letter: '8.5" × 11"',
-  paperback: '6" × 9"',
-  square: '8.25" × 8.25"',
-};
-
 export function MainArea({
   page,
   pageNumber,
+  spreadPages,
+  spreadPageNumbers,
   selectedElementId,
   trimPreset,
   bleedEnabled,
@@ -50,102 +51,57 @@ export function MainArea({
   onRotateElement,
   onUpdateText,
 }: MainAreaProps) {
-  const width = getPageWidth(zoom, spreadMode);
-  const [pageOverlay, setPageOverlay] = useState<HTMLDivElement | null>(null);
+  const pageWidth = getPageWidth(zoom, spreadMode);
+  const visiblePages =
+    spreadMode === "spread"
+      ? spreadPages.map((spreadPage, index) => ({
+          page: spreadPage,
+          pageNumber: spreadPageNumbers[index],
+          side: index === 0 ? "left" : "right",
+        }))
+      : [{ page, pageNumber, side: "single" }];
 
   return (
     <section
       aria-label="Page editor"
       className="flex min-w-0 flex-1 flex-col overflow-hidden"
     >
-      {/* <div className="flex h-11 shrink-0 items-center justify-between border-b border-[#e7e9e5] bg-[#fafbf9] px-5">
-        <div className="flex items-center gap-2 text-[11px] text-[#869089]">
-          <span>Interior</span>
-          <span className="text-[#c2c8c3]">/</span>
-          <span className="font-medium text-[#59655e]">{page.title}</span>
-        </div>
-        <div className="flex items-center gap-2 text-[11px] text-[#89938c]">
-          <span className="hidden sm:inline">Page size</span>
-          <span className="font-medium text-[#59655e]">{trimDimensions[trimPreset]}</span>
-        </div>
-      </div> */}
-
-      <div className="editor-canvas-scroll flex min-h-0 flex-1 flex-col items-center overflow-hidden">
-        {/* <div className="mb-3 flex w-full max-w-[980px] items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center rounded-md bg-white text-[#6c7c70] shadow-sm ring-1 ring-[#e7eae6]">
-              <Frame className="size-3.5" />
-            </span>
-            <span className="text-[11px] font-medium text-[#67736b]">
-              {spreadMode === "single" ? "Single page" : "Booklet spread"}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 text-[11px] text-[#98a19b]">
-            {bleedEnabled && (
-              <span className="text-[#a77456]">Bleed guides on</span>
-            )}
-            <span>{zoom} zoom</span>
-          </div>
-        </div> */}
-        <div className="flex-1 flex items-center justify-center">
-          <div
-            className="relative isolate shrink-0"
-            style={{
-              aspectRatio:
-                trimPreset === "square"
-                  ? "1 / 1"
-                  : trimPreset === "paperback"
-                    ? "2 / 3"
-                    : "8.5 / 11",
-              width,
-              maxWidth: "100%",
-            }}
-          >
-            <article
-              aria-label={`Book page ${pageNumber}`}
-              className="absolute inset-0 isolate overflow-hidden bg-[#fffefa] shadow-[0_12px_40px_rgba(34,48,38,0.12),0_2px_6px_rgba(34,48,38,0.08)] ring-1 ring-[#e5e2d9]"
-              data-page-canvas
-              data-page-id={page.id}
-              onPointerDown={(event) => {
-                if (event.target === event.currentTarget) onSelectElement(null);
-              }}
-            >
-              {bleedEnabled && (
+      <div className="editor-canvas-scroll flex min-h-0 flex-1 flex-col items-center overflow-auto">
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-5">
+          <div className="flex w-max shrink-0 items-center gap-3">
+            {visiblePages.map(({ page: canvasPage, pageNumber: canvasPageNumber, side }) =>
+              canvasPage ? (
+                <PageCanvas
+                  key={canvasPage.id}
+                  page={canvasPage}
+                  pageNumber={canvasPageNumber ?? pageNumber}
+                  width={pageWidth}
+                  trimPreset={trimPreset}
+                  bleedEnabled={bleedEnabled}
+                  selectedElementId={selectedElementId}
+                  onSelectElement={onSelectElement}
+                  onMoveElement={onMoveElement}
+                  onResizeElement={onResizeElement}
+                  onRotateElement={onRotateElement}
+                  onUpdateText={onUpdateText}
+                />
+              ) : (
                 <div
-                  className="pointer-events-none absolute inset-[3%] z-10 border border-dashed border-[#c8845d]/60"
-                  data-cover-exclude="true"
-                />
-              )}
-              {page.elements.length === 0 && (
-                <p
-                  className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-8 text-center font-serif text-sm italic text-[#a3aaa2]"
-                  data-cover-exclude="true"
+                  key={`blank-${side}`}
+                  aria-label={side === "left" ? "Blank left page" : "Next page is not created"}
+                  className="flex shrink-0 items-center justify-center bg-[#fffefa] text-center font-serif text-sm italic text-[#a3aaa2] shadow-[0_12px_40px_rgba(34,48,38,0.12),0_2px_6px_rgba(34,48,38,0.08)] ring-1 ring-[#e5e2d9]"
+                  style={{
+                    aspectRatio: getPageAspectRatio(trimPreset),
+                    width: pageWidth,
+                  }}
                 >
-                  Add content from the sidebar to start your page.
-                </p>
-              )}
-              {page.elements.map((element: EditorElement) => (
-                <CanvasElement
-                  key={element.id}
-                  element={element}
-                  selected={selectedElementId === element.id}
-                  overlayTarget={pageOverlay}
-                  onSelect={() => onSelectElement(element.id)}
-                  onMove={(position) => onMoveElement(element.id, position)}
-                  onResize={(size) => onResizeElement(element.id, size)}
-                  onRotate={(rotation) => onRotateElement(element.id, rotation)}
-                  onUpdateText={(content) => onUpdateText(element.id, content)}
-                />
-              ))}
-            </article>
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              ref={setPageOverlay}
-            />
+                  {side === "right" && "Add a page to continue the spread."}
+                </div>
+              ),
+            )}
           </div>
         </div>
-        <div className="mt-auto flex w-full px-4 pb-2 shrink-0 items-center justify-between border-t border-[#e7e9e5] pt-2 text-[10px] text-[#9aa29c]">
+        <div className="mt-auto flex w-full shrink-0 items-center justify-between border-t border-[#e7e9e5] px-4 pb-2 pt-2 text-[10px] text-[#9aa29c]">
           <span>
             Drag to position · Resize selected elements · Double-click text to
             edit
@@ -160,6 +116,93 @@ export function MainArea({
       </div>
     </section>
   );
+}
+
+function PageCanvas({
+  page,
+  pageNumber,
+  width,
+  trimPreset,
+  bleedEnabled,
+  selectedElementId,
+  onSelectElement,
+  onMoveElement,
+  onResizeElement,
+  onRotateElement,
+  onUpdateText,
+}: Omit<
+  MainAreaProps,
+  | "page"
+  | "pageNumber"
+  | "spreadPages"
+  | "spreadPageNumbers"
+  | "spreadMode"
+  | "zoom"
+> & {
+  page: EditorPage;
+  pageNumber: number;
+  width: string;
+}) {
+  const [pageOverlay, setPageOverlay] = useState<HTMLDivElement | null>(null);
+
+  return (
+    <div
+      className="relative isolate shrink-0"
+      style={{
+        aspectRatio: getPageAspectRatio(trimPreset),
+        width,
+      }}
+    >
+      <article
+        aria-label={`Book page ${pageNumber}`}
+        className="absolute inset-0 isolate overflow-hidden bg-[#fffefa] shadow-[0_12px_40px_rgba(34,48,38,0.12),0_2px_6px_rgba(34,48,38,0.08)] ring-1 ring-[#e5e2d9]"
+        data-page-canvas
+        data-page-id={page.id}
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) onSelectElement(null);
+        }}
+      >
+        {bleedEnabled && (
+          <div
+            className="pointer-events-none absolute inset-[3%] z-10 border border-dashed border-[#c8845d]/60"
+            data-cover-exclude="true"
+          />
+        )}
+        {page.elements.length === 0 && (
+          <p
+            className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-8 text-center font-serif text-sm italic text-[#a3aaa2]"
+            data-cover-exclude="true"
+          >
+            Add content from the sidebar to start your page.
+          </p>
+        )}
+        {page.elements.map((element: EditorElement) => (
+          <CanvasElement
+            key={element.id}
+            element={element}
+            selected={selectedElementId === element.id}
+            overlayTarget={pageOverlay}
+            onSelect={() => onSelectElement(element.id)}
+            onMove={(position) => onMoveElement(element.id, position)}
+            onResize={(size) => onResizeElement(element.id, size)}
+            onRotate={(rotation) => onRotateElement(element.id, rotation)}
+            onUpdateText={(content) => onUpdateText(element.id, content)}
+          />
+        ))}
+      </article>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        ref={setPageOverlay}
+      />
+    </div>
+  );
+}
+
+function getPageAspectRatio(trimPreset: TrimPreset) {
+  if (trimPreset === "square") return "1 / 1";
+  if (trimPreset === "paperback") return "2 / 3";
+  return "8.5 / 11";
 }
 
 function getPageWidth(zoom: ZoomLevel, spreadMode: SpreadMode) {

@@ -15,6 +15,7 @@ export function PageThumbnail({
   page,
   pageNumber,
   selected,
+  inSpread,
   onClick,
   onClone,
   onDelete,
@@ -26,6 +27,7 @@ export function PageThumbnail({
   page: EditorPage;
   pageNumber: number;
   selected: boolean;
+  inSpread: boolean;
   onClick: () => void;
   onClone: () => void;
   onDelete: () => void;
@@ -74,6 +76,8 @@ export function PageThumbnail({
           className={`relative block h-[78px] w-[58px] overflow-hidden bg-[#fffefa] shadow-sm ring-1 ${
             selected
               ? "ring-2 ring-[#4f795a]"
+              : inSpread
+                ? "ring-2 ring-[#a7bda9]"
               : "ring-[#d9dfd8] group-hover:ring-[#9bac9d]"
           }`}
         >
