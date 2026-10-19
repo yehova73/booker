@@ -44,6 +44,7 @@ import { ART_LIBRARY, SHAPE_LIBRARY } from "@/lib/designAssets";
 import { SudokuGeneratorDialog } from "./sudoku-generator-dialog";
 import { WordSearchGeneratorDialog } from "./word-search-generator-dialog";
 import { MazeGeneratorDialog } from "./maze-generator-dialog";
+import { uploadFileToS3 } from "@/utils/file-upload";
 
 const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Paragraph", style: "paragraph" },
@@ -97,7 +98,7 @@ export function LeftSidebar({
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
   onInsertArtwork: (artKey: string) => void;
-  onInsertImage: (src: string, alt: string) => void;
+  onInsertImage: (fileId: string, src: string, alt: string) => void;
   onGenerateSudoku: (
     squares: 2 | 3 | 4 | 5,
     difficulty: SudokuDifficulty,
@@ -273,61 +274,62 @@ function ImageMenuButton({
   onInsertImage,
   open,
 }: {
-  onInsertImage: (src: string, alt: string) => void;
+  onInsertImage: (fileId: string, src: string, alt: string) => void;
   open: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setUploadError("Choose a supported image file.");
-      return;
-    }
-
     setUploadError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        setUploadError("The selected image could not be read.");
-        return;
-      }
-      onInsertImage(reader.result, file.name);
-    };
-    reader.onerror = () =>
-      setUploadError(reader.error?.message ?? "The selected image could not be read.");
-    reader.readAsDataURL(file);
+    setIsUploading(true);
+    try {
+      const image = await uploadFileToS3(file);
+      onInsertImage(image.fileId, image.src, file.name);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "The image could not be uploaded.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
   }
 
-  function handleGenerateImage() {
+  async function handleGenerateImage() {
     const description = window.prompt("Describe the image you want to generate:");
     const prompt = description?.trim();
     if (!prompt) return;
 
     setUploadError(null);
     setIsGenerating(true);
-    window.setTimeout(() => {
+    try {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" fill="#f3f6f2"/><rect x="20" y="20" width="472" height="472" fill="none" stroke="#66816d" stroke-width="8"/><text x="256" y="256" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="600" fill="#315d44">AI Generated</text></svg>`;
-      onInsertImage(
-        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-        `AI generated: ${prompt}`,
+      const file = await svgToPngFile(svg, "generated-image.png");
+      const image = await uploadFileToS3(file);
+      onInsertImage(image.fileId, image.src, `AI generated: ${prompt}`);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "The image could not be generated.",
       );
+    } finally {
       setIsGenerating(false);
-    }, 600);
+    }
   }
 
   return (
     <div>
       <input
-        accept="image/*"
+        accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
         aria-hidden="true"
         className="sr-only"
         onChange={handleFileChange}
         ref={inputRef}
+        disabled={isUploading}
         tabIndex={-1}
         type="file"
       />
@@ -358,6 +360,7 @@ function ImageMenuButton({
           <DropdownMenuGroup>
             <DropdownMenuItem
               className="cursor-pointer gap-2 px-2 py-2"
+              disabled={isUploading}
               onClick={() => inputRef.current?.click()}
             >
               <span className="flex size-6 items-center justify-center rounded-md bg-[#f3f6f2] text-[#66816d]">
@@ -367,7 +370,7 @@ function ImageMenuButton({
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer gap-2 px-2 py-2"
-              disabled={isGenerating}
+              disabled={isGenerating || isUploading}
               onClick={handleGenerateImage}
             >
               <span className="flex size-6 items-center justify-center rounded-md bg-[#f3f6f2] text-[#66816d]">
@@ -385,6 +388,34 @@ function ImageMenuButton({
       )}
     </div>
   );
+}
+
+async function svgToPngFile(svg: string, fileName: string) {
+  const objectUrl = URL.createObjectURL(
+    new Blob([svg], { type: "image/svg+xml" }),
+  );
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+    await image.decode();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("The generated image could not be prepared.");
+    context.drawImage(image, 0, 0);
+
+    const png = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("The generated image could not be prepared."));
+      }, "image/png");
+    });
+    return new File([png], fileName, { type: "image/png" });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function LibraryButton({

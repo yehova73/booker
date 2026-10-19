@@ -175,7 +175,7 @@ type EditorContextValue = EditorDocument & {
   clonePage: (pageId: string) => void;
   deletePage: (pageId: string) => void;
   addTextElement: (textStyle: TextStyle) => void;
-  addImageElement: (src: string, alt: string) => void;
+  addImageElement: (fileId: string, src: string, alt: string) => void;
   addColoringPages: (images: ColoringPageImage[]) => void;
   addShapeElement: (shapeType: ShapeType) => void;
   addArtworkElement: (artKey: string) => void;
@@ -313,18 +313,13 @@ export function EditorProvider({
     if (!pendingSave) return;
 
     const timeout = setTimeout(() => {
-      const bookData = {
-        ...pendingSave.document,
-        pages: pendingSave.document.pages.map((page) => ({
-          ...page,
-          elements: page.elements.filter((element) => element.kind !== "image"),
-        })),
-      };
-
       saveQueueRef.current = saveQueueRef.current
         .then(async () => {
           if (saveRevisionRef.current !== pendingSave.revision) return;
-          const result = await saveBookDataAction(bookId, bookData);
+          const result = await saveBookDataAction(
+            bookId,
+            pendingSave.document,
+          );
           if (saveRevisionRef.current !== pendingSave.revision) return;
           if (result.status === "error") {
             setSnapshot((current) => ({
@@ -471,7 +466,7 @@ export function EditorProvider({
         });
         selectElement(element.id);
       },
-      addImageElement: (src, alt) => {
+      addImageElement: (fileId, src, alt) => {
         const topLayer = Math.max(
           -1,
           ...currentPage.elements.map((element) => element.zIndex),
@@ -479,6 +474,7 @@ export function EditorProvider({
         const element: ImageEditorElement = {
           id: crypto.randomUUID(),
           kind: "image",
+          fileId,
           src,
           alt,
           borderColor: "#1e293b",
@@ -513,6 +509,7 @@ export function EditorProvider({
           const element: ImageEditorElement = {
             id: crypto.randomUUID(),
             kind: "image",
+            fileId: image.fileId,
             src: image.src,
             alt: image.alt || title,
             objectFit: "contain",
@@ -1436,12 +1433,14 @@ function normalizeElement(value: unknown, index: number): EditorElement | null {
   }
   if (
     value.kind === "image" &&
+    typeof value.fileId === "string" &&
     typeof value.src === "string" &&
     typeof value.alt === "string"
   ) {
     return {
       ...position,
       kind: "image",
+      fileId: value.fileId,
       src: value.src,
       alt: value.alt,
       objectFit: value.objectFit === "contain" ? "contain" : "cover",
@@ -1945,6 +1944,7 @@ function isEditorElement(value: unknown): value is EditorElement {
   }
   if (value.kind === "image") {
     return (
+      typeof value.fileId === "string" &&
       typeof value.src === "string" &&
       typeof value.alt === "string" &&
       isHexColor(value.borderColor) &&

@@ -95,6 +95,7 @@ export type ImageFilterSettings = {
 
 export type ImageEditorElement = ElementPosition & {
   kind: "image";
+  fileId: string;
   src: string;
   alt: string;
   objectFit?: "cover" | "contain";
@@ -107,6 +108,7 @@ export type ImageEditorElement = ElementPosition & {
 };
 
 export type ColoringPageImage = {
+  fileId: string;
   src: string;
   alt: string;
 };

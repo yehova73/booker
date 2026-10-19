@@ -23,6 +23,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { deleteFilesAction } from "@/actions/files";
+import { uploadFileToS3 } from "@/utils/file-upload";
+import { isSupportedImageType } from "@/utils/file-types";
 import {
   createColoringPagePrompts,
   generateColoringPageImage,
@@ -66,6 +69,7 @@ export function ColoringPageDialog({
     null,
   );
   const [isAdding, setIsAdding] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const parsedPageCount = Number(pageCount);
@@ -87,12 +91,35 @@ export function ColoringPageDialog({
     setIsGenerating(false);
     setRegeneratingImageId(null);
     setIsAdding(false);
+    setIsUploading(false);
     setError(null);
   }
 
-  function handleOpenChange(nextOpen: boolean) {
-    if ((isGenerating || regeneratingImageId || isAdding) && !nextOpen) return;
-    if (!nextOpen) reset();
+  async function handleOpenChange(nextOpen: boolean) {
+    if (
+      (isGenerating || regeneratingImageId || isAdding || isUploading) &&
+      !nextOpen
+    ) {
+      return;
+    }
+    if (!nextOpen) {
+      const fileIds = [
+        ...uploads.map((image) => image.fileId),
+        ...generated.map((image) => image.fileId),
+      ];
+      if (fileIds.length > 0) {
+        const cleanup = await deleteFilesAction(fileIds);
+        if (cleanup.status !== "ok") {
+          setError(
+            cleanup.message?.description ??
+              cleanup.message?.title ??
+              "Unused images could not be removed.",
+          );
+          return;
+        }
+      }
+      reset();
+    }
     onOpenChange(nextOpen);
   }
 
@@ -105,27 +132,49 @@ export function ColoringPageDialog({
       setError("You can add up to 50 coloring page images.");
       return;
     }
-    if (files.some((file) => !file.type.startsWith("image/"))) {
-      setError("Choose image files only.");
+    if (files.some((file) => !isSupportedImageType(file.type))) {
+      setError("Choose JPEG, PNG, WebP, GIF, or AVIF images.");
       return;
     }
 
     setError(null);
+    setIsUploading(true);
     try {
-      const readFiles = await Promise.all(
+      const results = await Promise.allSettled(
         files.map(async (file) => ({
+          ...await uploadFileToS3(file),
           id: crypto.randomUUID(),
-          src: await readImageFile(file),
           alt: file.name,
         })),
       );
-      setUploads((current) => [...current, ...readFiles]);
-    } catch (readError) {
-      setError(
-        readError instanceof Error
-          ? readError.message
-          : "One or more images could not be read.",
+      const uploaded = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
       );
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") {
+        if (uploaded.length > 0) {
+          const cleanup = await deleteFilesAction(
+            uploaded.map((image) => image.fileId),
+          );
+          if (cleanup.status !== "ok") {
+            throw new Error(
+              cleanup.message?.description ??
+                cleanup.message?.title ??
+                "Some uploaded images could not be removed.",
+            );
+          }
+        }
+        throw failed.reason;
+      }
+      setUploads((current) => [...current, ...uploaded]);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "One or more images could not be uploaded.",
+      );
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -144,7 +193,7 @@ export function ColoringPageDialog({
         pageCount: parsedPageCount,
       });
       const nextGeneration = generationNumber + 1;
-      const generatedPages = await Promise.all(
+      const results = await Promise.allSettled(
         pagePrompts.map(async (page, index) => {
           const image = await generateColoringPageImage({
             prompt: page["image-prompt"],
@@ -152,6 +201,7 @@ export function ColoringPageDialog({
           });
           return {
             id: `${nextGeneration}-${index}`,
+            fileId: image.fileId,
             src: image.src,
             alt: page.name,
             selected: true,
@@ -159,9 +209,40 @@ export function ColoringPageDialog({
           };
         }),
       );
+      const generatedPages = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") {
+        if (generatedPages.length > 0) {
+          const cleanup = await deleteFilesAction(
+            generatedPages.map((image) => image.fileId),
+          );
+          if (cleanup.status !== "ok") {
+            throw new Error(
+              cleanup.message?.description ??
+                cleanup.message?.title ??
+                "Incomplete generated images could not be removed.",
+            );
+          }
+        }
+        throw failed.reason;
+      }
+
+      const oldFileIds = generated.map((image) => image.fileId);
       setGenerated(generatedPages);
       setGenerationNumber(nextGeneration);
       setStep(3);
+      if (oldFileIds.length > 0) {
+        const cleanup = await deleteFilesAction(oldFileIds);
+        if (cleanup.status !== "ok") {
+          setError(
+            cleanup.message?.description ??
+              cleanup.message?.title ??
+              "Previous generated images could not be removed.",
+          );
+        }
+      }
     } catch (generationError) {
       setError(
         generationError instanceof Error
@@ -187,10 +268,22 @@ export function ColoringPageDialog({
       setGenerated((current) =>
         current.map((candidate) =>
           candidate.id === imageId
-            ? { ...candidate, src: regenerated.src }
+            ? {
+                ...candidate,
+                fileId: regenerated.fileId,
+                src: regenerated.src,
+              }
             : candidate,
         ),
       );
+      const cleanup = await deleteFilesAction([image.fileId]);
+      if (cleanup.status !== "ok") {
+        setError(
+            cleanup.message?.description ??
+              cleanup.message?.title ??
+              "The previous image could not be removed.",
+        );
+      }
     } catch (regenerationError) {
       setError(
         regenerationError instanceof Error
@@ -202,10 +295,37 @@ export function ColoringPageDialog({
     }
   }
 
-  function addPages(images: ColoringPageImage[]) {
+  async function removeUploadedImage(image: UploadedImage) {
+    const result = await deleteFilesAction([image.fileId]);
+    if (result.status !== "ok") {
+      setError(
+        result.message?.description ??
+          result.message?.title ??
+          "The uploaded image could not be removed.",
+      );
+      return;
+    }
+    setUploads((current) => current.filter((item) => item.id !== image.id));
+  }
+
+  async function addPages(images: ColoringPageImage[]) {
     setError(null);
     setIsAdding(true);
     try {
+      const selectedFileIds = new Set(images.map((image) => image.fileId));
+      const unusedGeneratedIds = generated
+        .filter((image) => !selectedFileIds.has(image.fileId))
+        .map((image) => image.fileId);
+      if (unusedGeneratedIds.length > 0) {
+        const cleanup = await deleteFilesAction(unusedGeneratedIds);
+        if (cleanup.status !== "ok") {
+          throw new Error(
+            cleanup.message?.description ??
+              cleanup.message?.title ??
+              "Unused generated images could not be removed.",
+          );
+        }
+      }
       onAddPages(images);
       reset();
       onOpenChange(false);
@@ -284,8 +404,9 @@ export function ColoringPageDialog({
                   Upload multiple image files · up to 50 pages
                 </span>
                 <input
-                  accept="image/*"
+                  accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                   className="sr-only"
+                  disabled={isUploading || isAdding}
                   multiple
                   onChange={(event) => void handleUploads(event)}
                   type="file"
@@ -298,11 +419,7 @@ export function ColoringPageDialog({
                     <ImageTile
                       key={image.id}
                       image={image}
-                      onRemove={() =>
-                        setUploads((current) =>
-                          current.filter((item) => item.id !== image.id),
-                        )
-                      }
+                      onRemove={() => void removeUploadedImage(image)}
                     />
                   ))}
                 </div>
@@ -477,7 +594,10 @@ export function ColoringPageDialog({
             {step > 1 && (
               <Button
                 disabled={
-                  isGenerating || Boolean(regeneratingImageId) || isAdding
+                  isGenerating ||
+                  Boolean(regeneratingImageId) ||
+                  isAdding ||
+                  isUploading
                 }
                 onClick={() => {
                   setError(null);
@@ -504,10 +624,8 @@ export function ColoringPageDialog({
             </Button>
           ) : step === 2 && method === "upload" ? (
             <Button
-              disabled={uploads.length === 0 || isAdding}
-              onClick={() =>
-                addPages(uploads.map(({ src, alt }) => ({ src, alt })))
-              }
+              disabled={uploads.length === 0 || isAdding || isUploading}
+              onClick={() => void addPages(uploads)}
               type="button"
             >
               {isAdding
@@ -531,13 +649,14 @@ export function ColoringPageDialog({
                 selectedCount === 0 ||
                 isAdding ||
                 isGenerating ||
-                Boolean(regeneratingImageId)
+                Boolean(regeneratingImageId) ||
+                isUploading
               }
               onClick={() =>
-                addPages(
+                void addPages(
                   generated
                     .filter((image) => image.selected)
-                    .map(({ src, alt }) => ({ src, alt })),
+                    .map(({ fileId, src, alt }) => ({ fileId, src, alt })),
                 )
               }
               type="button"
@@ -622,20 +741,4 @@ function ImageTile({
       </p>
     </div>
   );
-}
-
-function readImageFile(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error(`Could not read ${file.name}.`));
-      }
-    };
-    reader.onerror = () =>
-      reject(reader.error ?? new Error(`Could not read ${file.name}.`));
-    reader.readAsDataURL(file);
-  });
 }

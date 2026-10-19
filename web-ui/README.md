@@ -32,7 +32,12 @@ authentication is added. Each batch is limited to 10 generated pages.
 Copy `.env.example` to `.env` and configure `DATABASE_URL`. Google sign-in
 requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; magic-link sign-in
 requires an SMTP `EMAIL_SERVER` and `EMAIL_FROM`. Set `NEXTAUTH_SECRET` to a
-long random value and `NEXTAUTH_URL` to the app's URL.
+long random value and `NEXTAUTH_URL` to the app's URL. Image uploads also need
+`AWS_REGION`, `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, and
+`AWS_SECRET_ACCESS_KEY`. Deploy `aws/template.yaml` with SAM and use its
+`FilesBucketName`, `FilesBucketRegion`, `FilesUserAccessKeyId`, and
+`FilesUserSecretAccessKey` outputs to configure these values. Treat the secret
+access key output as a credential and do not commit it.
 
 Generate Prisma Client and create the database tables with:
 
@@ -42,9 +47,10 @@ npm run db:migrate
 ```
 
 The dashboard supports user-owned collections and books, with book dimensions
-using the editor's letter, paperback, and square presets.
-Book editor content is saved to the database automatically; image elements are
-not persisted yet.
+using the editor's letter, paperback, and square presets. Book editor content
+and image references are saved to the database automatically; uploaded image
+objects are stored in a private S3 bucket and served through expiring signed
+URLs. Apply the `add_file_storage` Prisma migration before using image uploads.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

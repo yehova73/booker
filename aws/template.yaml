@@ -12,6 +12,56 @@ Globals:
     LoggingConfig:
       LogFormat: JSON
 Resources:
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - HEAD
+              - PUT
+            AllowedOrigins:
+              - "*"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3600
+
+  FilesUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: BookerFilesBucketAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt FilesBucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub "${FilesBucket.Arn}/*"
+
+  FilesUserAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref FilesUser
+
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -36,6 +86,18 @@ Resources:
           - app.ts
 
 Outputs:
+  FilesBucketName:
+    Description: Private S3 bucket for uploaded book images
+    Value: !Ref FilesBucket
+  FilesBucketRegion:
+    Description: AWS region containing the files bucket
+    Value: !Ref AWS::Region
+  FilesUserAccessKeyId:
+    Description: Access key ID for the scoped files IAM user
+    Value: !Ref FilesUserAccessKey
+  FilesUserSecretAccessKey:
+    Description: Secret access key for the scoped files IAM user
+    Value: !GetAtt FilesUserAccessKey.SecretAccessKey
   HelloWorldApi:
     Description: API Gateway endpoint URL for Prod stage for Hello World
       function

@@ -15,6 +15,8 @@
   "dependencies": {
     "@algorithm.ts/sudoku": "^4.0.4",
     "@auth/prisma-adapter": "^2.11.3",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
     "@base-ui/react": "^1.9.0",
     "@blex41/word-search": "^1.2.0",
     "@prisma/adapter-pg": "^7.10.1",

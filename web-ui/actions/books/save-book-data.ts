@@ -12,6 +12,7 @@ type ParsedBookData = {
   bookData: Prisma.InputJsonObject;
   title: string;
   dimension: BookDimension;
+  fileIds: string[];
 };
 
 type BookDataResult = {
@@ -35,6 +36,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseBookData(
   input: unknown,
+  fileKeys?: Map<string, string>,
 ): { value: ParsedBookData } | { error: string } {
   if (
     !isRecord(input) ||
@@ -72,6 +74,7 @@ function parseBookData(
 
   const pages: Prisma.InputJsonValue[] = [];
   const pageIds = new Set<string>();
+  const fileIds = new Set<string>();
   for (const page of input.pages) {
     if (
       !isRecord(page) ||
@@ -94,7 +97,31 @@ function parseBookData(
       if (!isRecord(element) || typeof element.kind !== "string") {
         return { error: "The editor document contains an invalid element." };
       }
-      if (element.kind === "image") continue;
+      if (element.kind === "image") {
+        if (
+          typeof element.fileId !== "string" ||
+          !element.fileId.trim() ||
+          typeof element.src !== "string" ||
+          typeof element.alt !== "string"
+        ) {
+          return { error: "The editor document contains an invalid image." };
+        }
+        const storageKey = fileKeys?.get(element.fileId);
+        if (fileKeys && !storageKey) {
+          return { error: "One or more images are not available." };
+        }
+
+        const serializedElement = JSON.stringify({
+          ...element,
+          ...(storageKey ? { src: storageKey } : {}),
+        });
+        if (serializedElement === undefined) {
+          return { error: "The editor document contains invalid data." };
+        }
+        elements.push(JSON.parse(serializedElement));
+        fileIds.add(element.fileId);
+        continue;
+      }
       if (!editorElementKinds.has(element.kind)) {
         return {
           error: "The editor document contains an unsupported element.",
@@ -135,6 +162,7 @@ function parseBookData(
       },
       title: bookName.trim(),
       dimension: trimPreset,
+      fileIds: [...fileIds],
     },
   };
 }
@@ -183,18 +211,56 @@ export async function saveBookDataAction(
     };
   }
 
-  const result = await prisma.book.updateMany({
+  const files = await prisma.file.findMany({
     where: {
-      id: bookId,
-      collection: { is: { userId } },
+      id: { in: parsed.value.fileIds },
+      userId,
     },
-    data: {
-      bookData: parsed.value.bookData,
-      title: parsed.value.title,
-      dimension: parsed.value.dimension,
-    },
+    select: { id: true, storageKey: true },
   });
-  if (result.count === 0) {
+  if (files.length !== parsed.value.fileIds.length) {
+    return {
+      status: "error",
+      message: { title: "One or more images are not available." },
+    };
+  }
+
+  const normalized = parseBookData(
+    input,
+    new Map(files.map(({ id, storageKey }) => [id, storageKey])),
+  );
+  if ("error" in normalized) {
+    return {
+      status: "error",
+      message: { title: normalized.error },
+    };
+  }
+
+  const updated = await prisma.$transaction(async (transaction) => {
+    const result = await transaction.book.updateMany({
+      where: {
+        id: bookId,
+        collection: { is: { userId } },
+      },
+      data: {
+        bookData: normalized.value.bookData,
+        title: normalized.value.title,
+        dimension: normalized.value.dimension,
+      },
+    });
+    if (result.count === 0) return false;
+
+    await transaction.book.update({
+      where: { id: bookId },
+      data: {
+        files: {
+          set: normalized.value.fileIds.map((id) => ({ id })),
+        },
+      },
+    });
+    return true;
+  });
+  if (!updated) {
     return {
       status: "error",
       message: { title: "Book not found." },

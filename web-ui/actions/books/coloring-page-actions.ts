@@ -1,6 +1,11 @@
 "use server";
 
 import OpenAI from "openai";
+import { randomUUID } from "node:crypto";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { deleteObject, getPresignedUrl, uploadObject } from "@/utils/s3";
 
 type ColoringSize = "portrait" | "square" | "landscape";
 type ColoringPagePrompt = {
@@ -14,6 +19,14 @@ const maxPageCount = 10;
 
 let openAIClient: OpenAI | undefined;
 
+async function getAuthenticatedUserId() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    throw new Error("You must be signed in to generate coloring pages.");
+  }
+  return session.user.id;
+}
+
 export async function createColoringPagePrompts({
   prompt,
   size,
@@ -23,6 +36,7 @@ export async function createColoringPagePrompts({
   size: ColoringSize;
   pageCount: number;
 }): Promise<ColoringPagePrompt[]> {
+  await getAuthenticatedUserId();
   validateColoringRequest(prompt, size, pageCount);
   const response = await getOpenAIClient().responses.create({
     model: "gpt-4o-mini",
@@ -65,7 +79,6 @@ export async function createColoringPagePrompts({
   let parsed: unknown;
   try {
     parsed = JSON.parse(response.output_text);
-    console.log(parsed);
   } catch {
     throw new Error("The image plan response was not valid JSON.");
   }
@@ -86,7 +99,7 @@ export async function generateColoringPageImage({
 }: {
   prompt: string;
   size: ColoringSize;
-}): Promise<{ src: string }> {
+}): Promise<{ fileId: string; src: string }> {
   if (
     typeof prompt !== "string" ||
     prompt.trim().length === 0 ||
@@ -95,6 +108,7 @@ export async function generateColoringPageImage({
   ) {
     throw new Error("The image prompt or page size is invalid.");
   }
+  const userId = await getAuthenticatedUserId();
 
   const imageSize =
     size === "landscape"
@@ -118,7 +132,39 @@ export async function generateColoringPageImage({
     throw new Error("OpenAI returned no image data.");
   }
 
-  return { src: `data:image/webp;base64,${imageBase64}` };
+  const image = Buffer.from(imageBase64, "base64");
+  const fileId = randomUUID();
+  const storageKey = `${userId}/${fileId}`;
+  const file = await prisma.file.create({
+    data: {
+      id: fileId,
+      userId,
+      storageKey,
+      originalName: "coloring-page.webp",
+      contentType: "image/webp",
+      size: image.byteLength,
+    },
+    select: { id: true },
+  });
+
+  try {
+    await uploadObject(storageKey, image, "image/webp");
+    return {
+      fileId: file.id,
+      src: await getPresignedUrl(storageKey),
+    };
+  } catch (uploadError) {
+    try {
+      await deleteObject(storageKey);
+      await prisma.file.delete({ where: { id: file.id } });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [uploadError, cleanupError],
+        "The generated image could not be saved or cleaned up.",
+      );
+    }
+    throw uploadError;
+  }
 }
 
 function getOpenAIClient() {
