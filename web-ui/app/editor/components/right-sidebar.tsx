@@ -11,6 +11,7 @@ import {
   Sparkles,
   Trash2,
   Type,
+  Upload,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { MazeElementOptions } from "./maze-element-options";
 import { ShapeElementOptions } from "./shape-element-options";
 import { SudokuElementOptions } from "./sudoku-element-options";
 import { TextElementOptions } from "./text-element-options";
+import { UploadsDialog } from "./uploads-dialog";
 import {
   WordSearchGridElementOptions,
   WordSearchWordsElementOptions,
@@ -35,9 +37,13 @@ import {
 export function RightSidebar({
   coloringDialogOpen,
   onColoringDialogOpenChange,
+  uploadsDialogOpen,
+  onUploadsDialogOpenChange,
 }: {
   coloringDialogOpen: boolean;
   onColoringDialogOpenChange: (open: boolean) => void;
+  uploadsDialogOpen: boolean;
+  onUploadsDialogOpenChange: (open: boolean) => void;
 }) {
   const editor = useEditorContext();
   const layers = [...editor.currentPage.elements].sort(
@@ -240,6 +246,15 @@ export function RightSidebar({
             </div>
             <Button
               className="w-full justify-start"
+              onClick={() => onUploadsDialogOpenChange(true)}
+              type="button"
+              variant="outline"
+            >
+              <Upload />
+              Browse uploads
+            </Button>
+            <Button
+              className="w-full justify-start"
               onClick={() => onColoringDialogOpenChange(true)}
               type="button"
             >
@@ -253,6 +268,11 @@ export function RightSidebar({
         open={coloringDialogOpen}
         onOpenChange={onColoringDialogOpenChange}
         onAddPages={editor.addColoringPages}
+      />
+      <UploadsDialog
+        open={uploadsDialogOpen}
+        onOpenChange={onUploadsDialogOpenChange}
+        onAddImage={editor.addImageElement}
       />
     </Sidebar>
   );

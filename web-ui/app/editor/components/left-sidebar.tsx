@@ -94,6 +94,7 @@ export function LeftSidebar({
   onGenerateWordSearch,
   onGenerateMaze,
   onOpenColoringPage,
+  onOpenUploads,
 }: {
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
@@ -109,6 +110,7 @@ export function LeftSidebar({
   ) => Promise<void>;
   onGenerateMaze: (settings: MazeGenerationSettings) => Promise<void>;
   onOpenColoringPage: () => void;
+  onOpenUploads: () => void;
 }) {
   const { open } = useSidebar("left");
   const [sudokuDialogOpen, setSudokuDialogOpen] = useState(false);
@@ -246,7 +248,12 @@ export function LeftSidebar({
             Your library
           </SidebarGroupLabel>
           <div className="space-y-1">
-            <LibraryButton icon={Upload} label="Uploads" open={open} />
+            <LibraryButton
+              icon={Upload}
+              label="Uploads"
+              onClick={onOpenUploads}
+              open={open}
+            />
             <LibraryButton icon={Layers2} label="Templates" open={open} />
           </div>
         </nav>
@@ -421,16 +428,19 @@ async function svgToPngFile(svg: string, fileName: string) {
 function LibraryButton({
   icon: Icon,
   label,
+  onClick,
   open,
 }: {
   icon: LucideIcon;
   label: string;
+  onClick?: () => void;
   open?: boolean;
 }) {
   return (
     <SidebarMenuButton
       className="h-10 w-full justify-start gap-3 px-2.5 text-[13px] font-medium text-[#647067] hover:bg-[#f3f6f2] max-sm:justify-center max-sm:px-0"
-      disabled
+      disabled={!onClick}
+      onClick={onClick}
     >
       <span
         className={cn(

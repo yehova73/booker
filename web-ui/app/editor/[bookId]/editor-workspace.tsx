@@ -39,6 +39,7 @@ export function EditorWorkspacePage({
 function EditorWorkspace() {
   const editor = useEditorContext();
   const [coloringDialogOpen, setColoringDialogOpen] = useState(false);
+  const [uploadsDialogOpen, setUploadsDialogOpen] = useState(false);
   const selectedElementId = editor.selectedElementId;
   const deleteElement = editor.deleteElement;
 
@@ -98,6 +99,7 @@ function EditorWorkspace() {
             onGenerateWordSearch={editor.addWordSearchPages}
             onGenerateMaze={editor.addMazePages}
             onOpenColoringPage={() => setColoringDialogOpen(true)}
+            onOpenUploads={() => setUploadsDialogOpen(true)}
           />
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden bg-[#f5f6f3]">
             <div className="flex min-h-0 flex-1">
@@ -120,6 +122,8 @@ function EditorWorkspace() {
           <RightSidebar
             coloringDialogOpen={coloringDialogOpen}
             onColoringDialogOpenChange={setColoringDialogOpen}
+            uploadsDialogOpen={uploadsDialogOpen}
+            onUploadsDialogOpenChange={setUploadsDialogOpen}
           />
         </div>
         <PagesFooter

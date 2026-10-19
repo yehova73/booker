@@ -9,12 +9,23 @@ import { deleteObject, getPresignedUploadUrl, getPresignedUrl } from "@/utils/s3
 import {
   isSupportedImageType,
   maxImageUploadSize,
+  supportedImageTypes,
 } from "@/utils/file-types";
 
 type FileUploadResult = {
   fileId: string;
   uploadUrl: string;
   viewUrl: string;
+};
+
+export type UserFileLibraryItem = {
+  id: string;
+  storageKey: string;
+  originalName: string;
+  contentType: string;
+  size: number;
+  createdAt: string;
+  src: string;
 };
 
 async function getAuthenticatedUserId() {
@@ -80,6 +91,40 @@ export async function createFileUploadAction(
     await prisma.file.delete({ where: { id: file.id } });
     throw error;
   }
+}
+
+export async function listUserFilesAction(): Promise<
+  ServerActionResponse<{ files: UserFileLibraryItem[] }>
+> {
+  const userId = await getAuthenticatedUserId();
+  const files = await prisma.file.findMany({
+    where: {
+      userId,
+      contentType: { in: [...supportedImageTypes] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      storageKey: true,
+      originalName: true,
+      contentType: true,
+      size: true,
+      createdAt: true,
+    },
+  });
+
+  return {
+    status: "ok",
+    data: {
+      files: await Promise.all(
+        files.map(async (file) => ({
+          ...file,
+          createdAt: file.createdAt.toISOString(),
+          src: await getPresignedUrl(file.storageKey),
+        })),
+      ),
+    },
+  };
 }
 
 export async function deleteFilesAction(
