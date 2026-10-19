@@ -148,7 +148,7 @@ async function getAuthenticatedUserId() {
 }
 
 export async function saveBookDataAction(
-  bookId: unknown,
+  bookId: string,
   input: unknown,
 ): Promise<ServerActionResponse<BookDataResult>> {
   const userId = await getAuthenticatedUserId();

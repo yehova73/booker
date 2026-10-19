@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createColoringPagePrompts,
   generateColoringPageImage,
-} from "../coloring-page-actions";
+} from "../../../actions/books/coloring-page-actions";
 import type { ColoringPageImage } from "./editor-types";
 
 type ColoringMethod = "upload" | "ai";
@@ -96,9 +96,7 @@ export function ColoringPageDialog({
     onOpenChange(nextOpen);
   }
 
-  async function handleUploads(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
+  async function handleUploads(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
     if (files.length === 0) return;
@@ -368,7 +366,8 @@ export function ColoringPageDialog({
                   value={pageCount}
                 />
                 <span className="block text-[10px] font-normal text-[#929b94]">
-                  Choose 1–{maxAiPageCount} pages per batch while running locally.
+                  Choose 1–{maxAiPageCount} pages per batch while running
+                  locally.
                 </span>
               </label>
             </div>
@@ -477,7 +476,9 @@ export function ColoringPageDialog({
           <div>
             {step > 1 && (
               <Button
-                disabled={isGenerating || Boolean(regeneratingImageId) || isAdding}
+                disabled={
+                  isGenerating || Boolean(regeneratingImageId) || isAdding
+                }
                 onClick={() => {
                   setError(null);
                   setStep(step === 3 ? 2 : 1);
