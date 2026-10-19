@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Image as ImageIcon,
   LoaderCircle,
@@ -40,9 +41,14 @@ export type CollectionCardData = {
   title: string;
   color: string;
   description: string;
+  books: {
+    id: string;
+    title: string;
+    coverUrl: string | null;
+  }[];
 };
 
-type CollectionInput = Omit<CollectionCardData, "id">;
+type CollectionInput = Omit<CollectionCardData, "id" | "books">;
 
 export function CollectionsClient({
   collections,
@@ -96,11 +102,7 @@ export function CollectionsClient({
           <p className="mt-1 text-sm text-muted-foreground">
             Create a collection to group related books together.
           </p>
-          <Button
-            type="button"
-            className="mt-4"
-            onClick={openCreateDialog}
-          >
+          <Button type="button" className="mt-4" onClick={openCreateDialog}>
             <Plus />
             New collection
           </Button>
@@ -112,19 +114,48 @@ export function CollectionsClient({
               key={collection.id}
               className="overflow-hidden rounded-xl border bg-card shadow-sm"
             >
-              <div
-                className="relative"
-              >
+              <div className="relative">
                 <Link
                   href={`/dashboard/collections/${collection.id}`}
                   aria-label={`Open ${collection.title} collection`}
-                  className="flex aspect-video items-center justify-center"
+                  className={`grid h-64 ${
+                    collection.books.length === 1
+                      ? "grid-cols-1"
+                      : collection.books.length === 2
+                        ? "grid-cols-2"
+                        : "grid-cols-3"
+                  }`}
                   style={{ backgroundColor: `${collection.color}22` }}
                 >
-                  <ImageIcon
-                    aria-hidden="true"
-                    className="size-8 text-muted-foreground/50"
-                  />
+                  {collection.books.length > 0 ? (
+                    collection.books.map((book) => (
+                      <span
+                        key={book.id}
+                        className="relative flex min-w-0 items-center justify-center overflow-hidden"
+                      >
+                        {book.coverUrl ? (
+                          <Image
+                            alt={`Cover artwork for ${book.title}`}
+                            className="object-cover"
+                            fill
+                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                            src={book.coverUrl}
+                            unoptimized
+                          />
+                        ) : (
+                          <ImageIcon
+                            aria-hidden="true"
+                            className="size-8 text-muted-foreground/50"
+                          />
+                        )}
+                      </span>
+                    ))
+                  ) : (
+                    <ImageIcon
+                      aria-hidden="true"
+                      className="size-8 text-muted-foreground/50"
+                    />
+                  )}
                 </Link>
                 <div className="absolute right-3 top-3">
                   <DropdownMenu>
@@ -246,9 +277,7 @@ function CollectionFormDialog({
   const descriptionId = useId();
   const [title, setTitle] = useState(collection?.title ?? "");
   const [color, setColor] = useState(collection?.color ?? "#dbeafe");
-  const [description, setDescription] = useState(
-    collection?.description ?? "",
-  );
+  const [description, setDescription] = useState(collection?.description ?? "");
   const { call: createCollection, loading: isCreating } = useServerAction(
     createCollectionAction,
   );

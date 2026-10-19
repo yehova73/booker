@@ -138,6 +138,7 @@ export async function createBookAction(
   });
 
   revalidatePath(getCollectionPath(collectionId));
+  revalidatePath("/dashboard/ebooks");
   return {
     status: "ok",
     data: book,
@@ -188,6 +189,7 @@ export async function updateBookAction(
   }
 
   revalidatePath(getCollectionPath(collectionId));
+  revalidatePath("/dashboard/ebooks");
   return {
     status: "ok",
     data: { id: bookId },
@@ -265,6 +267,7 @@ export async function updateBookDetailsAction(
 
   revalidatePath(`/dashboard/book/${bookId}`);
   revalidatePath(`/editor/${bookId}`);
+  revalidatePath("/dashboard/ebooks");
   revalidatePath("/dashboard/collections");
   revalidatePath(getCollectionPath(book.collectionId));
   revalidatePath(getCollectionPath(collection.id));
@@ -308,6 +311,7 @@ export async function deleteBookAction(
   }
 
   revalidatePath(getCollectionPath(collectionId));
+  revalidatePath("/dashboard/ebooks");
   return {
     status: "ok",
     data: { id: bookId },

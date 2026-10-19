@@ -1,15 +1,15 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Image as ImageIcon,
   LoaderCircle,
-  MoreHorizontal,
   Plus,
   Trash2,
 } from "lucide-react";
+import { BookCard, type BookCardData } from "@/components/book-card";
+import { BookFormDialog } from "@/components/book-form-dialog";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,40 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import useServerAction from "@/hooks/use-server-action";
-import {
-  bookDimensionOptions,
-  isBookDimension,
-  type BookDimension,
-} from "@/lib/book-dimensions";
-import {
-  createBookAction,
-  deleteBookAction,
-  updateBookAction,
-} from "@/actions/books/books";
-
-type BookCardData = {
-  id: string;
-  title: string;
-  description: string;
-  dimension: BookDimension;
-};
+import { deleteBookAction } from "@/actions/books/books";
 
 type CollectionData = {
   id: string;
@@ -61,8 +29,6 @@ type CollectionData = {
   description: string;
   color: string;
 };
-
-type BookInput = Omit<BookCardData, "id">;
 
 export function CollectionBooksClient({
   collection,
@@ -132,73 +98,16 @@ export function CollectionBooksClient({
           </Button>
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {books.map((book) => {
-            const dimension = bookDimensionOptions.find(
-              (option) => option.value === book.dimension,
-            );
-
-            return (
-              <article
-                key={book.id}
-                className="overflow-hidden rounded-xl border bg-card shadow-sm"
-              >
-                <div className="relative">
-                  <Link
-                    href={`/dashboard/book/${book.id}`}
-                    aria-label={`View ${book.title}`}
-                    className="flex aspect-video items-center justify-center"
-                    style={{ backgroundColor: `${collection.color}22` }}
-                  >
-                    <ImageIcon
-                      aria-hidden="true"
-                      className="size-8 text-muted-foreground/50"
-                    />
-                  </Link>
-                  <div className="absolute right-3 top-3">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="icon-sm"
-                            aria-label={`Actions for ${book.title}`}
-                          />
-                        }
-                      >
-                        <MoreHorizontal />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-36">
-                        <DropdownMenuItem onClick={() => openEditDialog(book)}>
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => setDeletingBook(book)}
-                        >
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-                <Link
-                  href={`/dashboard/book/${book.id}`}
-                  className="block space-y-2 p-4"
-                >
-                  <h2 className="truncate font-medium">{book.title}</h2>
-                  <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
-                    {book.description || "No description yet."}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {dimension?.dimensions} · {dimension?.label}
-                  </p>
-                </Link>
-              </article>
-            );
-          })}
+        <div className="grid gap-5 sm:grid-cols-3 lg:grid-cols-4">
+          {books.map((book) => (
+            <BookCard
+              key={book.id}
+              book={book}
+              collection={collection}
+              onEdit={() => openEditDialog(book)}
+              onDelete={() => setDeletingBook(book)}
+            />
+          ))}
         </div>
       )}
 
@@ -254,113 +163,5 @@ export function CollectionBooksClient({
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function BookFormDialog({
-  open,
-  collectionId,
-  book,
-  onOpenChange,
-}: {
-  open: boolean;
-  collectionId: string;
-  book: BookCardData | null;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const dimensionId = useId();
-  const [title, setTitle] = useState(book?.title ?? "");
-  const [description, setDescription] = useState(book?.description ?? "");
-  const [dimension, setDimension] = useState<BookDimension>(
-    book?.dimension ?? "paperback",
-  );
-  const { call: createBook, loading: isCreating } =
-    useServerAction(createBookAction);
-  const { call: updateBook, loading: isUpdating } =
-    useServerAction(updateBookAction);
-  const isSaving = isCreating || isUpdating;
-
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const input: BookInput = { title, description, dimension };
-    const result = book
-      ? await updateBook(collectionId, book.id, input)
-      : await createBook(collectionId, input);
-    if (result) {
-      onOpenChange(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{book ? "Edit book" : "New book"}</DialogTitle>
-          <DialogDescription>
-            Set the book title, description, and page dimensions.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="space-y-4" onSubmit={submit}>
-          <div className="space-y-2">
-            <Label htmlFor={titleId}>Title</Label>
-            <Input
-              id={titleId}
-              autoFocus
-              required
-              maxLength={100}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. The Garden Adventures"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={descriptionId}>Description</Label>
-            <Textarea
-              id={descriptionId}
-              maxLength={1000}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="A short description of the book."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={dimensionId}>Dimensions</Label>
-            <Select
-              value={dimension}
-              onValueChange={(value) => {
-                if (isBookDimension(value)) setDimension(value);
-              }}
-            >
-              <SelectTrigger id={dimensionId} className="w-full">
-                <SelectValue placeholder="Choose dimensions" />
-              </SelectTrigger>
-              <SelectContent align="start">
-                {bookDimensionOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.dimensions} ({option.label})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSaving}
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <LoaderCircle className="animate-spin" />}
-              {book ? "Save changes" : "Create book"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

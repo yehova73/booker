@@ -83,7 +83,9 @@ export function BookDetailsClient({
             variant="ghost"
             size="icon"
             aria-label={`Back to ${book.collection.title}`}
-            render={<Link href={`/dashboard/collections/${book.collection.id}`} />}
+            render={
+              <Link href={`/dashboard/collections/${book.collection.id}`} />
+            }
           >
             <ArrowLeft />
           </Button>
@@ -101,10 +103,7 @@ export function BookDetailsClient({
               <Pencil />
               Edit details
             </Button>
-            <Button
-              type="button"
-              render={<Link href={`/editor/${book.id}`} />}
-            >
+            <Button type="button" render={<Link href={`/editor/${book.id}`} />}>
               <BookOpen />
               Edit Book
             </Button>
@@ -167,7 +166,8 @@ export function BookDetailsClient({
           <div className="rounded-2xl border bg-card p-6">
             <h2 className="text-lg font-semibold">Book information</h2>
             <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-              {book.description || "Add a description to tell this book’s story."}
+              {book.description ||
+                "Add a description to tell this book’s story."}
             </p>
             <Link
               href={`/dashboard/collections/${book.collection.id}`}
@@ -194,9 +194,7 @@ export function BookDetailsClient({
                 icon={<Ruler aria-hidden="true" />}
                 label="Book size"
                 value={
-                  size
-                    ? `${size.dimensions} · ${size.label}`
-                    : "Unknown size"
+                  size ? `${size.dimensions} · ${size.label}` : "Unknown size"
                 }
               />
               <MetadataCard
@@ -331,7 +329,7 @@ function BookDetailsDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <Label htmlFor={dimensionId}>Book size</Label>
             <Select
               value={dimension}
@@ -350,7 +348,7 @@ function BookDetailsDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
           <DialogFooter>
             <Button
               type="button"

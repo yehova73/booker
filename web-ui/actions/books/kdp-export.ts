@@ -74,7 +74,7 @@ export async function createKdpPdfUploadAction(
       id: fileId,
       userId,
       storageKey,
-      originalName: `${safeTitle || "book"}-kdp-interior.pdf`,
+      originalName: `${safeTitle || "book"}-kdp.pdf`,
       contentType: kdpPdfContentType,
       size,
     },

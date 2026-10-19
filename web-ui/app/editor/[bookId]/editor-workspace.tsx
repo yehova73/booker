@@ -234,15 +234,13 @@ function EditorWorkspace({
     const bookName = editor.bookName;
     const trimPreset = editor.trimPreset;
     const bleedEnabled = editor.bleedEnabled;
-    const interiorPages = editor.pages.filter(
-      (page) => page.id !== coverPageId,
-    );
-    if (interiorPages.length === 0) {
-      toast.error("No interior pages to export", {
-        description: "The designated cover page is exported separately.",
-      });
-      return;
-    }
+    const coverPage = editor.pages.find((page) => page.id === coverPageId);
+    const exportPages = coverPage
+      ? [
+          coverPage,
+          ...editor.pages.filter((page) => page.id !== coverPage.id),
+        ]
+      : [...editor.pages];
 
     kdpPdfExportInProgressRef.current = true;
     setKdpPdfExporting(true);
@@ -251,9 +249,9 @@ function EditorWorkspace({
       const pdf = await PDFDocument.create();
       pdf.setTitle(bookName);
       pdf.setCreator("Booker");
-      pdf.setSubject("KDP print interior");
+      pdf.setSubject("KDP print PDF with cover page");
 
-      for (const [pageIndex, page] of interiorPages.entries()) {
+      for (const [pageIndex, page] of exportPages.entries()) {
         const canvas = await waitForKdpCanvas({
           page,
           pageIndex,
@@ -334,8 +332,8 @@ function EditorWorkspace({
         new Blob([pdfBuffer], { type: "application/pdf" }),
         getKdpPdfFilename(bookName),
       );
-      toast.success("KDP interior PDF exported", {
-        description: `${interiorPages.length} page${interiorPages.length === 1 ? "" : "s"} saved to this book.`,
+      toast.success("KDP PDF exported", {
+        description: `${exportPages.length} page${exportPages.length === 1 ? "" : "s"} saved to this book.`,
       });
     } catch (error) {
       let description =
@@ -498,7 +496,7 @@ async function waitForCanvasImages(canvas: HTMLElement, bookId: string) {
 function getKdpPdfFilename(bookName: string) {
   const safeName =
     bookName.replace(/[\u0000-\u001f<>:"/\\|?*]/g, "-").trim() || "book";
-  return `${safeName}-kdp-interior.pdf`;
+  return `${safeName}-kdp.pdf`;
 }
 
 function downloadPdf(file: Blob, filename: string) {

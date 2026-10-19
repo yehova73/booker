@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getPresignedUrl } from "@/utils/s3";
 import { CollectionBooksClient } from "./collection-books-client";
 
 export default async function CollectionPage({
@@ -32,6 +33,9 @@ export default async function CollectionPage({
           title: true,
           description: true,
           dimension: true,
+          cover: {
+            select: { storageKey: true },
+          },
         },
       },
     },
@@ -41,6 +45,18 @@ export default async function CollectionPage({
     notFound();
   }
 
+  const books = await Promise.all(
+    collection.books.map(async (book) => ({
+      id: book.id,
+      title: book.title,
+      description: book.description,
+      dimension: book.dimension,
+      coverUrl: book.cover
+        ? await getPresignedUrl(book.cover.storageKey)
+        : null,
+    })),
+  );
+
   return (
     <CollectionBooksClient
       collection={{
@@ -49,7 +65,7 @@ export default async function CollectionPage({
         description: collection.description,
         color: collection.color,
       }}
-      books={collection.books}
+      books={books}
     />
   );
 }
