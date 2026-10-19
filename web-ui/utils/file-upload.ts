@@ -6,7 +6,7 @@ import {
 } from "@/actions/files";
 import { isSupportedImageType, maxImageUploadSize } from "./file-types";
 
-export async function uploadFileToS3(file: File) {
+export async function uploadFileToS3(bookId: string, file: File) {
   if (!isSupportedImageType(file.type)) {
     throw new Error("Choose a JPEG, PNG, WebP, GIF, or AVIF image.");
   }
@@ -15,6 +15,7 @@ export async function uploadFileToS3(file: File) {
   }
 
   const response = await createFileUploadAction({
+    bookId,
     fileName: file.name,
     contentType: file.type,
     size: file.size,

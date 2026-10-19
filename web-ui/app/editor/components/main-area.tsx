@@ -105,15 +105,22 @@ export function MainArea({
               aria-label={`Book page ${pageNumber}`}
               className="absolute inset-0 isolate overflow-hidden bg-[#fffefa] shadow-[0_12px_40px_rgba(34,48,38,0.12),0_2px_6px_rgba(34,48,38,0.08)] ring-1 ring-[#e5e2d9]"
               data-page-canvas
+              data-page-id={page.id}
               onPointerDown={(event) => {
                 if (event.target === event.currentTarget) onSelectElement(null);
               }}
             >
               {bleedEnabled && (
-                <div className="pointer-events-none absolute inset-[3%] z-10 border border-dashed border-[#c8845d]/60" />
+                <div
+                  className="pointer-events-none absolute inset-[3%] z-10 border border-dashed border-[#c8845d]/60"
+                  data-cover-exclude="true"
+                />
               )}
               {page.elements.length === 0 && (
-                <p className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-8 text-center font-serif text-sm italic text-[#a3aaa2]">
+                <p
+                  className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-8 text-center font-serif text-sm italic text-[#a3aaa2]"
+                  data-cover-exclude="true"
+                >
                   Add content from the sidebar to start your page.
                 </p>
               )}

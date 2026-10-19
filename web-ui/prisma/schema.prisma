@@ -110,10 +110,13 @@ model Book {
   description  String        @default("") @db.Text
   dimension    BookDimension @default(paperback)
   bookData     Json?
+  coverId      String?       @unique
+  coverPageId  String?
   collectionId String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   collection   Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  cover        File?         @relation("BookCover", fields: [coverId], references: [id], onDelete: SetNull)
   files        File[]
 
   @@index([collectionId, createdAt])
@@ -129,6 +132,7 @@ model File {
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   books        Book[]
+  coverForBook Book?    @relation("BookCover")
 
   @@index([userId, createdAt])
 }

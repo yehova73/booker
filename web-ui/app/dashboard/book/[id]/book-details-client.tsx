@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   BookOpen,
@@ -46,6 +47,7 @@ type BookDetails = {
   description: string;
   dimension: BookDimension;
   pageCount: number;
+  coverUrl: string | null;
   createdAt: string;
   updatedAt: string;
   collection: {
@@ -117,26 +119,47 @@ export function BookDetailsClient({
           </h2>
           <div
             role="img"
-            aria-label={`Mock cover for ${book.title}`}
+            aria-label={`Cover preview for ${book.title}`}
             className="relative mx-auto flex aspect-[3/4] w-full max-w-[260px] items-center justify-center overflow-hidden rounded-r-xl border shadow-xl"
-            style={{ backgroundColor: book.collection.color }}
+            style={{
+              aspectRatio:
+                book.dimension === "square"
+                  ? "1 / 1"
+                  : book.dimension === "paperback"
+                    ? "2 / 3"
+                    : "8.5 / 11",
+              backgroundColor: book.collection.color,
+            }}
           >
+            {book.coverUrl ? (
+              <Image
+                alt={`Cover artwork for ${book.title}`}
+                className="object-contain"
+                fill
+                sizes="(max-width: 1024px) 80vw, 260px"
+                src={book.coverUrl}
+                unoptimized
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-8 text-center">
+                <BookOpen aria-hidden="true" className="size-8 opacity-60" />
+                <h3 className="line-clamp-4 text-2xl font-semibold leading-tight">
+                  {book.title}
+                </h3>
+                <span className="max-w-full truncate text-sm opacity-75">
+                  {book.collection.title}
+                </span>
+              </div>
+            )}
             <div
               aria-hidden="true"
-              className="absolute inset-y-0 left-0 w-3 border-r border-black/10 bg-black/10"
+              className="pointer-events-none absolute inset-y-0 left-0 w-3 border-r border-black/10 bg-black/10"
             />
-            <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-8 text-center">
-              <BookOpen aria-hidden="true" className="size-8 opacity-60" />
-              <h3 className="line-clamp-4 text-2xl font-semibold leading-tight">
-                {book.title}
-              </h3>
-              <span className="max-w-full truncate text-sm opacity-75">
-                {book.collection.title}
-              </span>
-            </div>
           </div>
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Cover artwork will be available later.
+            {book.coverUrl
+              ? "Cover artwork from the selected page."
+              : "Star a page in the editor to set the book cover."}
           </p>
         </section>
 

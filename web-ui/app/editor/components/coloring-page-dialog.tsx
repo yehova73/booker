@@ -48,10 +48,12 @@ const sizeOptions: { value: ColoringSize; label: string; ratio: string }[] = [
 ];
 
 export function ColoringPageDialog({
+  bookId,
   open,
   onOpenChange,
   onAddPages,
 }: {
+  bookId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddPages: (images: ColoringPageImage[]) => void;
@@ -142,7 +144,7 @@ export function ColoringPageDialog({
     try {
       const results = await Promise.allSettled(
         files.map(async (file) => ({
-          ...await uploadFileToS3(file),
+          ...await uploadFileToS3(bookId, file),
           id: crypto.randomUUID(),
           alt: file.name,
         })),
@@ -196,6 +198,7 @@ export function ColoringPageDialog({
       const results = await Promise.allSettled(
         pagePrompts.map(async (page, index) => {
           const image = await generateColoringPageImage({
+            bookId,
             prompt: page["image-prompt"],
             size,
           });
@@ -262,6 +265,7 @@ export function ColoringPageDialog({
     setRegeneratingImageId(imageId);
     try {
       const regenerated = await generateColoringPageImage({
+        bookId,
         prompt: image.imagePrompt,
         size,
       });

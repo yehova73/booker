@@ -35,11 +35,13 @@ import {
 } from "./word-search-element-options";
 
 export function RightSidebar({
+  bookId,
   coloringDialogOpen,
   onColoringDialogOpenChange,
   uploadsDialogOpen,
   onUploadsDialogOpenChange,
 }: {
+  bookId: string;
   coloringDialogOpen: boolean;
   onColoringDialogOpenChange: (open: boolean) => void;
   uploadsDialogOpen: boolean;
@@ -265,6 +267,7 @@ export function RightSidebar({
         </Tabs>
       </SidebarContent>
       <ColoringPageDialog
+        bookId={bookId}
         open={coloringDialogOpen}
         onOpenChange={onColoringDialogOpenChange}
         onAddPages={editor.addColoringPages}

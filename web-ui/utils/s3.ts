@@ -39,6 +39,15 @@ export async function getPresignedUrl(storageKey: string) {
   );
 }
 
+export async function getObject(storageKey: string) {
+  return getS3Client().send(
+    new GetObjectCommand({
+      Bucket: getBucketName(),
+      Key: storageKey,
+    }),
+  );
+}
+
 export async function getPresignedUploadUrl(
   storageKey: string,
   contentType: string,

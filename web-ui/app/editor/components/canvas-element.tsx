@@ -430,6 +430,7 @@ function FutureElement({
       <div
         aria-label={element.alt || "Uploaded image"}
         className="relative box-border h-full w-full overflow-hidden"
+        data-file-id={element.fileId}
         style={{
           borderColor: element.borderColor,
           borderStyle: "solid",

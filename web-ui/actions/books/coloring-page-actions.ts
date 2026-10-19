@@ -94,13 +94,17 @@ export async function createColoringPagePrompts({
 }
 
 export async function generateColoringPageImage({
+  bookId,
   prompt,
   size,
 }: {
+  bookId: string;
   prompt: string;
   size: ColoringSize;
 }): Promise<{ fileId: string; src: string }> {
   if (
+    typeof bookId !== "string" ||
+    !bookId.trim() ||
     typeof prompt !== "string" ||
     prompt.trim().length === 0 ||
     prompt.length > maxImagePromptLength ||
@@ -109,6 +113,16 @@ export async function generateColoringPageImage({
     throw new Error("The image prompt or page size is invalid.");
   }
   const userId = await getAuthenticatedUserId();
+  const book = await prisma.book.findFirst({
+    where: {
+      id: bookId,
+      collection: { is: { userId } },
+    },
+    select: { id: true },
+  });
+  if (!book) {
+    throw new Error("Book not found.");
+  }
 
   const imageSize =
     size === "landscape"
@@ -134,7 +148,7 @@ export async function generateColoringPageImage({
 
   const image = Buffer.from(imageBase64, "base64");
   const fileId = randomUUID();
-  const storageKey = `${userId}/${fileId}`;
+  const storageKey = `${userId}/${book.id}/${fileId}`;
   const file = await prisma.file.create({
     data: {
       id: fileId,

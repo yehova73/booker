@@ -46,6 +46,8 @@ export async function createFileUploadAction(
   const userId = await getAuthenticatedUserId();
   if (
     !isRecord(input) ||
+    typeof input.bookId !== "string" ||
+    !input.bookId.trim() ||
     typeof input.fileName !== "string" ||
     !input.fileName.trim() ||
     input.fileName.length > 255 ||
@@ -64,8 +66,22 @@ export async function createFileUploadAction(
     };
   }
 
+  const book = await prisma.book.findFirst({
+    where: {
+      id: input.bookId,
+      collection: { is: { userId } },
+    },
+    select: { id: true },
+  });
+  if (!book) {
+    return {
+      status: "error",
+      message: { title: "Book not found." },
+    };
+  }
+
   const fileId = randomUUID();
-  const storageKey = `${userId}/${fileId}`;
+  const storageKey = `${userId}/${book.id}/${fileId}`;
   const file = await prisma.file.create({
     data: {
       id: fileId,
@@ -151,6 +167,7 @@ export async function deleteFilesAction(
       id: { in: uniqueIds },
       userId,
       books: { none: {} },
+      coverForBook: { is: null },
     },
     select: { id: true, storageKey: true },
   });
@@ -169,6 +186,7 @@ export async function deleteFilesAction(
       id: { in: uniqueIds },
       userId,
       books: { none: {} },
+      coverForBook: { is: null },
     },
   });
   return {

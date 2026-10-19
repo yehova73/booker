@@ -28,6 +28,7 @@ export default async function EditorBookPage({
       title: true,
       dimension: true,
       bookData: true,
+      coverPageId: true,
       files: {
         select: {
           id: true,
@@ -53,6 +54,7 @@ export default async function EditorBookPage({
       bookTitle={book.title}
       initialBookData={withSignedImageUrls(book.bookData, signedFiles)}
       initialTrimPreset={book.dimension}
+      initialCoverPageId={book.coverPageId}
     />
   );
 }

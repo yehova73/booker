@@ -13,6 +13,7 @@ type ParsedBookData = {
   title: string;
   dimension: BookDimension;
   fileIds: string[];
+  pageIds: string[];
 };
 
 type BookDataResult = {
@@ -163,6 +164,7 @@ function parseBookData(
       title: bookName.trim(),
       dimension: trimPreset,
       fileIds: [...fileIds],
+      pageIds: [...pageIds],
     },
   };
 }
@@ -202,6 +204,7 @@ export async function saveBookDataAction(
     },
     select: {
       collectionId: true,
+      coverPageId: true,
     },
   });
   if (!book) {
@@ -237,6 +240,9 @@ export async function saveBookDataAction(
   }
 
   const updated = await prisma.$transaction(async (transaction) => {
+    const shouldClearCover =
+      book.coverPageId !== null &&
+      !normalized.value.pageIds.includes(book.coverPageId);
     const result = await transaction.book.updateMany({
       where: {
         id: bookId,
@@ -246,6 +252,7 @@ export async function saveBookDataAction(
         bookData: normalized.value.bookData,
         title: normalized.value.title,
         dimension: normalized.value.dimension,
+        ...(shouldClearCover ? { coverId: null, coverPageId: null } : {}),
       },
     });
     if (result.count === 0) return false;

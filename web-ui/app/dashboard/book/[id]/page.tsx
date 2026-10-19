@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getPresignedUrl } from "@/utils/s3";
 import { BookDetailsClient } from "./book-details-client";
 
 export const instant = false;
@@ -40,6 +41,9 @@ export default async function BookPage({
         createdAt: true,
         updatedAt: true,
         bookData: true,
+        cover: {
+          select: { storageKey: true },
+        },
         collection: {
           select: {
             id: true,
@@ -60,6 +64,10 @@ export default async function BookPage({
     notFound();
   }
 
+  const coverUrl = book.cover
+    ? await getPresignedUrl(book.cover.storageKey)
+    : null;
+
   return (
     <BookDetailsClient
       book={{
@@ -68,6 +76,7 @@ export default async function BookPage({
         description: book.description,
         dimension: book.dimension,
         pageCount: getPageCount(book.bookData),
+        coverUrl,
         createdAt: book.createdAt.toISOString(),
         updatedAt: book.updatedAt.toISOString(),
         collection: book.collection,

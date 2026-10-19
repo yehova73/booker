@@ -32,10 +32,16 @@ Resources:
               - GET
               - HEAD
               - PUT
+              - POST
             AllowedOrigins:
-              - "*"
+              - http://localhost:3000
+              - http://127.0.0.1:3000
+              - https://*.yourdomain.com
             ExposedHeaders:
               - ETag
+              - x-amz-server-side-encryption
+              - x-amz-request-id
+              - x-amz-id-2
             MaxAge: 3600
 
   FilesUser:

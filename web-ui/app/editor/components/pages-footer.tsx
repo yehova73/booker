@@ -14,6 +14,9 @@ type PagesFooterProps = {
   onAddPage: () => void;
   onClonePage: (pageId: string) => void;
   onDeletePage: (pageId: string) => void;
+  coverPageId: string | null;
+  onSetCover: (page: EditorPage) => void;
+  coverSavingPageId: string | null;
   onGenerateSolutions: () => void;
 };
 
@@ -24,6 +27,9 @@ export function PagesFooter({
   onAddPage,
   onClonePage,
   onDeletePage,
+  coverPageId,
+  onSetCover,
+  coverSavingPageId,
   onGenerateSolutions,
 }: PagesFooterProps) {
   const hasPuzzles = pages.some((page) =>
@@ -87,6 +93,9 @@ export function PagesFooter({
               onClick={() => onSelectPage(page.id)}
               onClone={() => onClonePage(page.id)}
               onDelete={() => onDeletePage(page.id)}
+              onSetCover={() => onSetCover(page)}
+              isCover={page.id === coverPageId}
+              coverSavingPageId={coverSavingPageId}
               canDelete={pages.length > 1}
             />
           ))}

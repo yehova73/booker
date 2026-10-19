@@ -1,6 +1,6 @@
 "use client";
 
-import { CopyPlus, Trash2 } from "lucide-react";
+import { CopyPlus, LoaderCircle, Star, Trash2 } from "lucide-react";
 
 import type { EditorElement, EditorPage } from "./editor-types";
 import { ShapeGraphic } from "./shape-graphic";
@@ -18,6 +18,9 @@ export function PageThumbnail({
   onClick,
   onClone,
   onDelete,
+  onSetCover,
+  isCover,
+  coverSavingPageId,
   canDelete,
 }: {
   page: EditorPage;
@@ -26,6 +29,9 @@ export function PageThumbnail({
   onClick: () => void;
   onClone: () => void;
   onDelete: () => void;
+  onSetCover: () => void;
+  isCover: boolean;
+  coverSavingPageId: string | null;
   canDelete: boolean;
 }) {
   const wordSearchSolutionColors = new Map(
@@ -52,6 +58,8 @@ export function PageThumbnail({
         ),
       ]),
   );
+  const coverSaving = coverSavingPageId !== null;
+  const savingThisCover = coverSavingPageId === page.id;
 
   return (
     <div className="group relative w-[68px] shrink-0 transition-transform duration-150 hover:-translate-y-0.5">
@@ -328,7 +336,37 @@ export function PageThumbnail({
           {pageNumber}
         </span>
       </button>
-      <div className="pointer-events-none absolute bottom-5 left-0 right-0 z-10 flex justify-center translate-y-1 items-center gap-1 rounded-b-md border border-[#e5e8e3] bg-gray-500/20 p-1 opacity-0 shadow-md backdrop-blur-sm transition-all duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+      <div className="pointer-events-none absolute bottom-5 left-0 right-0 z-10 flex justify-center translate-y-1 items-center gap-0.5 rounded-b-md border border-[#e5e8e3] bg-gray-500/20 p-1 opacity-0 shadow-md backdrop-blur-sm transition-all duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+        <button
+          aria-label={
+            savingThisCover
+              ? `Saving page ${pageNumber} as the cover`
+              : isCover
+              ? `Update cover from page ${pageNumber}`
+              : `Set page ${pageNumber} as the cover`
+          }
+          className={`flex size-5 cursor-pointer items-center justify-center rounded transition-colors hover:bg-[#f1f5f0] ${
+            isCover
+              ? "text-amber-500 hover:text-amber-600"
+              : "text-[#637067] hover:text-[#315d44]"
+          } disabled:cursor-wait disabled:opacity-50`}
+          disabled={coverSaving}
+          onClick={onSetCover}
+          title={
+            savingThisCover
+              ? "Saving cover..."
+              : isCover
+              ? `Update cover from page ${pageNumber}`
+              : `Set page ${pageNumber} as the cover`
+          }
+          type="button"
+        >
+          {savingThisCover ? (
+            <LoaderCircle className="size-3 animate-spin" />
+          ) : (
+            <Star className={`size-3 ${isCover ? "fill-current" : ""}`} />
+          )}
+        </button>
         <button
           aria-label={`Clone page ${pageNumber}`}
           className="flex size-5 cursor-pointer items-center justify-center rounded text-[#637067] transition-colors hover:bg-[#f1f5f0] hover:text-[#315d44]"

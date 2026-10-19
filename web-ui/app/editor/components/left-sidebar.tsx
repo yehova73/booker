@@ -86,6 +86,7 @@ const categories: { title: string; icon: LucideIcon; items: string[] }[] = [
 ];
 
 export function LeftSidebar({
+  bookId,
   onInsertText,
   onInsertShape,
   onInsertArtwork,
@@ -96,6 +97,7 @@ export function LeftSidebar({
   onOpenColoringPage,
   onOpenUploads,
 }: {
+  bookId: string;
   onInsertText: (style: TextStyle) => void;
   onInsertShape: (shapeType: ShapeType) => void;
   onInsertArtwork: (artKey: string) => void;
@@ -234,6 +236,7 @@ export function LeftSidebar({
                 </DropdownMenu>
                 {title === "Artwork" && (
                   <ImageMenuButton
+                    bookId={bookId}
                     onInsertImage={onInsertImage}
                     open={open}
                   />
@@ -278,9 +281,11 @@ export function LeftSidebar({
 }
 
 function ImageMenuButton({
+  bookId,
   onInsertImage,
   open,
 }: {
+  bookId: string;
   onInsertImage: (fileId: string, src: string, alt: string) => void;
   open: boolean;
 }) {
@@ -296,7 +301,7 @@ function ImageMenuButton({
     setUploadError(null);
     setIsUploading(true);
     try {
-      const image = await uploadFileToS3(file);
+      const image = await uploadFileToS3(bookId, file);
       onInsertImage(image.fileId, image.src, file.name);
     } catch (error) {
       setUploadError(
@@ -317,7 +322,7 @@ function ImageMenuButton({
     try {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" fill="#f3f6f2"/><rect x="20" y="20" width="472" height="472" fill="none" stroke="#66816d" stroke-width="8"/><text x="256" y="256" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="600" fill="#315d44">AI Generated</text></svg>`;
       const file = await svgToPngFile(svg, "generated-image.png");
-      const image = await uploadFileToS3(file);
+      const image = await uploadFileToS3(bookId, file);
       onInsertImage(image.fileId, image.src, `AI generated: ${prompt}`);
     } catch (error) {
       setUploadError(
