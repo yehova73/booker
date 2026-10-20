@@ -5,7 +5,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { ServerActionResponse } from "@/hooks/use-server-action";
-import { deleteObject, getPresignedUploadUrl, getPresignedUrl } from "@/utils/s3";
+import {
+  deleteObject,
+  getPresignedUploadUrl,
+  getPresignedUrl,
+} from "@/utils/s3";
 import {
   isSupportedImageType,
   maxImageUploadSize,
@@ -117,6 +121,7 @@ export async function listUserFilesAction(): Promise<
     where: {
       userId,
       contentType: { in: [...supportedImageTypes] },
+      bookCover: false,
     },
     orderBy: { createdAt: "desc" },
     select: {

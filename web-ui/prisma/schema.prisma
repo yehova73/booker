@@ -130,6 +130,7 @@ model File {
   originalName String   @db.VarChar(255)
   contentType  String   @db.VarChar(100)
   size         Int
+  bookCover    Boolean  @default(false)
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   books        Book[]

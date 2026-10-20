@@ -56,17 +56,26 @@ export async function saveBookCoverAction(
     };
   }
 
-  const result = await prisma.book.updateMany({
-    where: {
-      id: bookId,
-      collection: { is: { userId } },
-    },
-    data: {
-      coverId: file.id,
-      coverPageId: pageId,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.book.updateMany({
+      where: {
+        id: bookId,
+        collection: { is: { userId } },
+      },
+      data: {
+        coverId: file.id,
+        coverPageId: pageId,
+      },
+    });
+    if (result.count > 0) {
+      await tx.file.update({
+        where: { id: file.id },
+        data: { bookCover: true },
+      });
+    }
+    return result.count;
   });
-  if (result.count === 0) {
+  if (updated === 0) {
     return {
       status: "error",
       message: { title: "The cover could not be updated." },
