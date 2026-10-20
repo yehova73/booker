@@ -13,6 +13,39 @@ enum BookDimension {
   square
 }
 
+enum AiBookPageSize {
+  letter
+  paperback
+  square
+}
+
+enum AiBookPuzzleType {
+  sudoku
+  wordSearch
+  maze
+  crossword
+  wordScramble
+  logicPuzzle
+  coloringPage
+}
+
+enum AiBookPlanPageType {
+  titlePage
+  storyScene
+  activity
+  sudoku
+  wordSearch
+  maze
+  crossword
+  wordScramble
+  logicPuzzle
+  coloringPage
+}
+
+enum AiBookPlanStatus {
+  draft
+}
+
 model User {
   id                    String                @id @default(cuid())
   name                  String?
@@ -28,6 +61,7 @@ model User {
   changePasswordTokens  ChangePasswordToken[]
   collections           Collection[]
   files                 File[]
+  aiBookPlans           AiBookPlan[]
 }
 
 model Account {
@@ -121,6 +155,52 @@ model Book {
   kdpExports   BookKdpExport[]
 
   @@index([collectionId, createdAt])
+}
+
+model AiBookPlan {
+  id             String             @id @default(cuid())
+  title          String             @db.VarChar(100)
+  niche          String             @default("") @db.VarChar(100)
+  pageCount      Int                @default(32)
+  pageSize       AiBookPageSize     @default(letter)
+  initialPrompt  String             @db.Text
+  storyPuzzle    Boolean            @default(false)
+  status         AiBookPlanStatus   @default(draft)
+  userId         String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzles        AiBookPlanPuzzle[]
+  pages          AiBookPlanPage[]
+
+  @@index([userId, createdAt])
+}
+
+model AiBookPlanPuzzle {
+  id        String          @id @default(cuid())
+  planId    String
+  type      AiBookPuzzleType
+  createdAt DateTime        @default(now())
+  plan      AiBookPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, type])
+  @@index([planId])
+}
+
+model AiBookPlanPage {
+  id                 String              @id @default(cuid())
+  planId             String
+  pageNumber         Int
+  type               AiBookPlanPageType
+  prompt             String              @db.Text
+  settings           Json?
+  regenerationCount  Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  plan               AiBookPlan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, pageNumber])
+  @@index([planId, pageNumber])
 }
 
 model File {

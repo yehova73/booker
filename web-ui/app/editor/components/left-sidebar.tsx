@@ -46,6 +46,7 @@ import { WordSearchGeneratorDialog } from "./word-search-generator-dialog";
 import { MazeGeneratorDialog } from "./maze-generator-dialog";
 import { AiImageDialog } from "./ai-image-dialog";
 import { uploadFileToS3 } from "@/utils/file-upload";
+import { AI_STUDIO_PUZZLE_OPTIONS } from "@/lib/ai-studio";
 
 const textOptions: { label: string; style: TextStyle }[] = [
   { label: "Paragraph", style: "paragraph" },
@@ -74,15 +75,7 @@ const categories: { title: string; icon: LucideIcon; items: string[] }[] = [
   {
     title: "Puzzles",
     icon: Puzzle,
-    items: [
-      "Sudoku",
-      "Word search",
-      "Maze",
-      "Crossword",
-      "Word scramble",
-      "Logic puzzle",
-      "Coloring page",
-    ],
+    items: AI_STUDIO_PUZZLE_OPTIONS.map(({ label }) => label),
   },
 ];
 

@@ -6,6 +6,7 @@ import {
   BookOpen,
   FolderOpen,
   LayoutDashboard,
+  Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -27,6 +28,7 @@ const navigationItems = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Collections", href: "/dashboard/collections", icon: FolderOpen },
   { label: "Ebooks", href: "/dashboard/ebooks", icon: BookOpen },
+  { label: "AI Studio", href: "/dashboard/ai-studio", icon: Sparkles },
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {
@@ -44,7 +46,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {navigationItems.map(({ label, href, icon: Icon }) => {
-                  const isActive = pathname === href;
+                  const isActive =
+                    pathname === href ||
+                    (href === "/dashboard/ai-studio" &&
+                      pathname.startsWith("/dashboard/ai-studio/"));
 
                   return (
                     <SidebarMenuItem key={href}>
