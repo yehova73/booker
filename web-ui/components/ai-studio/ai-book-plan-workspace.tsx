@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   BookOpen,
   Check,
+  LoaderCircle,
   LayoutGrid,
   RefreshCw,
   Settings2,
@@ -26,6 +27,7 @@ import {
   getDefaultAiBookPageSettings,
 } from "@/lib/ai-studio";
 import { updateAiBookPlanPageAction } from "@/actions/ai-studio/ai-book-plan-pages";
+import { generateAiBookBlueprintAction } from "@/actions/ai-studio/ai-book-blueprints";
 import type {
   AiBookPageSize,
   AiBookPlanPageType,
@@ -36,6 +38,7 @@ type PlanPage = EditablePlanPage & { updatedAt: string };
 type AiBookPlanWorkspaceData = {
   id: string;
   title: string;
+  kdpDescription: string;
   niche: string;
   pageCount: number;
   pageSize: AiBookPageSize;
@@ -61,6 +64,9 @@ export function AiBookPlanWorkspace({
   const { call: updatePage, loading: isSwapping } = useServerAction(
     updateAiBookPlanPageAction,
   );
+  const { call: generateBlueprint, loading: isGenerating } = useServerAction(
+    generateAiBookBlueprintAction,
+  );
   const selectedPage =
     plan.pages.find((page) => page.id === selectedPageId) ?? plan.pages[0];
   const editingPage = plan.pages.find((page) => page.id === editingPageId);
@@ -81,6 +87,7 @@ export function AiBookPlanWorkspace({
     await updatePage(page.id, {
       type: nextType.value,
       prompt: page.prompt,
+      description: page.description,
       settings: getDefaultAiBookPageSettings(nextType.value),
     });
   }
@@ -100,13 +107,29 @@ export function AiBookPlanWorkspace({
           </Button>
         }
         title={plan.title}
-        description="AI book blueprint · Draft"
+        description={`AI book blueprint · ${plan.status}`}
         className="shrink-0"
         actions={
-          <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium capitalize text-muted-foreground">
-            <Sparkles className="size-3.5" />
-            {plan.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium capitalize text-muted-foreground">
+              <Sparkles className="size-3.5" />
+              {plan.status}
+            </span>
+            <Button
+              type="button"
+              disabled={isGenerating}
+              onClick={() => generateBlueprint(plan.id)}
+            >
+              {isGenerating ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <Sparkles />
+              )}
+              {plan.status === "generated"
+                ? "Regenerate Blueprint"
+                : "Generate Blueprint"}
+            </Button>
+          </div>
         }
       />
 
@@ -164,6 +187,7 @@ export function AiBookPlanWorkspace({
                       selected={selectedPage?.id === page.id}
                       storyPuzzle={plan.storyPuzzle}
                       swapping={isSwapping}
+                      canSwap={pageTypeOptions(page.pageNumber).length > 1}
                       onOpen={() => {
                         setSelectedPageId(page.id);
                         setEditingPageId(page.id);
@@ -183,6 +207,7 @@ export function AiBookPlanWorkspace({
                   selected={selectedPage?.id === page.id}
                   storyPuzzle={plan.storyPuzzle}
                   swapping={isSwapping}
+                  canSwap={pageTypeOptions(page.pageNumber).length > 1}
                   onOpen={() => {
                     setSelectedPageId(page.id);
                     setEditingPageId(page.id);
@@ -253,6 +278,11 @@ export function AiBookPlanWorkspace({
                 <p className="mt-1 text-xs font-medium text-primary">
                   {getPageTypeLabel(selectedPage.type)}
                 </p>
+                {selectedPage.description && (
+                  <p className="mt-3 text-sm leading-6">
+                    {selectedPage.description}
+                  </p>
+                )}
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                   {selectedPage.prompt}
                 </p>
@@ -276,6 +306,15 @@ export function AiBookPlanWorkspace({
               {plan.initialPrompt}
             </p>
           </section>
+
+          {plan.kdpDescription && (
+            <section className="rounded-xl border bg-card p-5">
+              <h2 className="font-semibold">KDP description</h2>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                {plan.kdpDescription}
+              </p>
+            </section>
+          )}
         </aside>
       </div>
 
@@ -299,6 +338,7 @@ function PageCard({
   selected,
   storyPuzzle,
   swapping,
+  canSwap,
   onOpen,
   onSwap,
   compact = false,
@@ -307,6 +347,7 @@ function PageCard({
   selected: boolean;
   storyPuzzle: boolean;
   swapping: boolean;
+  canSwap: boolean;
   onOpen: () => void;
   onSwap: () => void;
   compact?: boolean;
@@ -350,7 +391,7 @@ function PageCard({
             compact ? "line-clamp-3" : "line-clamp-4"
           }`}
         >
-          {page.prompt}
+          {page.description || page.prompt}
         </span>
       </button>
       <div className="flex gap-2 border-t px-3 py-2 transition-opacity lg:absolute lg:inset-x-2 lg:top-2 lg:justify-end lg:border-0 lg:p-0 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100">
@@ -369,7 +410,7 @@ function PageCard({
           size="sm"
           variant="secondary"
           className="h-7 bg-background/95 text-xs shadow-sm"
-          disabled={swapping}
+          disabled={swapping || !canSwap}
           onClick={onSwap}
         >
           <RefreshCw />
@@ -393,12 +434,29 @@ function getAvailablePageTypes(
   plan: AiBookPlanWorkspaceData,
   pageNumber: number,
 ): PageTypeOption[] {
-  return AI_BOOK_PLAN_PAGE_TYPES.filter((option) => {
-    if (option.value === "titlePage") return pageNumber === 1;
-    if (option.value === "storyScene") return plan.storyPuzzle;
-    if (option.value === "activity") return true;
-    return plan.puzzles.some((puzzle) => puzzle === option.value);
-  });
+  if (pageNumber === 1) {
+    return AI_BOOK_PLAN_PAGE_TYPES.filter(
+      (option) => option.value === "titlePage",
+    );
+  }
+  if (plan.storyPuzzle && plan.puzzles.length === 0) {
+    return AI_BOOK_PLAN_PAGE_TYPES.filter(
+      (option) => option.value === "storyScene",
+    );
+  }
+  if (plan.storyPuzzle && pageNumber % 2 === 0) {
+    return AI_BOOK_PLAN_PAGE_TYPES.filter(
+      (option) => option.value === "storyScene",
+    );
+  }
+  if (plan.puzzles.length === 0) {
+    return AI_BOOK_PLAN_PAGE_TYPES.filter(
+      (option) => option.value === "activity",
+    );
+  }
+  return AI_BOOK_PLAN_PAGE_TYPES.filter((option) =>
+    plan.puzzles.some((puzzle) => puzzle === option.value),
+  );
 }
 
 function getPageTypeLabel(type: AiBookPlanPageType) {

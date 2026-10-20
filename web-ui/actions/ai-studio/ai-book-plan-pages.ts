@@ -16,6 +16,7 @@ import {
 type PageUpdateInput = {
   type: AiBookPlanPageType;
   prompt: string;
+  description: string;
   settings: Prisma.InputJsonObject;
 };
 
@@ -33,7 +34,7 @@ function parsePageUpdate(
     return { error: "Enter the page settings before saving." };
   }
 
-  const { type, prompt, settings } = input;
+  const { type, prompt, description, settings } = input;
   if (
     typeof type !== "string" ||
     !AI_BOOK_PLAN_PAGE_TYPES.some((option) => option.value === type)
@@ -42,6 +43,12 @@ function parsePageUpdate(
   }
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 4000) {
     return { error: "Page prompts must contain 1 to 4,000 characters." };
+  }
+  if (
+    typeof description !== "string" ||
+    description.length > 1000
+  ) {
+    return { error: "Page descriptions must be 1,000 characters or fewer." };
   }
   if (!isRecord(settings)) {
     return { error: "Page settings are invalid." };
@@ -65,6 +72,7 @@ function parsePageUpdate(
     value: {
       type: type as AiBookPlanPageType,
       prompt: prompt.trim(),
+      description: description.trim(),
       settings: parsedSettings,
     },
   };
@@ -85,8 +93,12 @@ function isAvailablePageType(
   puzzles: { type: string }[],
 ) {
   if (type === "titlePage") return pageNumber === 1;
-  if (type === "storyScene") return storyPuzzle;
-  if (type === "activity") return true;
+  if (pageNumber === 1) return false;
+  if (storyPuzzle && puzzles.length === 0) return type === "storyScene";
+  if (storyPuzzle && pageNumber % 2 === 0) return type === "storyScene";
+  if (storyPuzzle && type === "storyScene") return false;
+  if (puzzles.length === 0) return type === "activity";
+  if (type === "activity") return false;
   return (
     AI_STUDIO_PUZZLE_OPTIONS.some((option) => option.value === type) &&
     puzzles.some((puzzle) => puzzle.type === type)

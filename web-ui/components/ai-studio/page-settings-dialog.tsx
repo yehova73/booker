@@ -35,6 +35,7 @@ export type EditablePlanPage = {
   pageNumber: number;
   type: AiBookPlanPageType;
   prompt: string;
+  description: string;
   settings: AiBookPageSettings;
   regenerationCount: number;
 };
@@ -57,6 +58,7 @@ export function PageSettingsDialog({
 }) {
   const [type, setType] = useState(page.type);
   const [prompt, setPrompt] = useState(page.prompt);
+  const [description, setDescription] = useState(page.description);
   const [settings, setSettings] = useState(page.settings);
   const { call: savePage, loading: isSaving } = useServerAction(
     updateAiBookPlanPageAction,
@@ -67,12 +69,22 @@ export function PageSettingsDialog({
   const isBusy = isSaving || isRegenerating;
 
   async function save() {
-    const result = await savePage(page.id, { type, prompt, settings });
+    const result = await savePage(page.id, {
+      type,
+      prompt,
+      description,
+      settings,
+    });
     if (result) onOpenChange(false);
   }
 
   async function regeneratePrompt() {
-    const result = await regenerate(page.id, { type, prompt, settings });
+    const result = await regenerate(page.id, {
+      type,
+      prompt,
+      description,
+      settings,
+    });
     if (result) setPrompt(result.prompt);
   }
 
@@ -239,6 +251,17 @@ export function PageSettingsDialog({
                   }.`
                 : "Regenerate to get a fresh AI-written prompt."}
             </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="plan-page-description">Page description</Label>
+            <Textarea
+              id="plan-page-description"
+              rows={3}
+              maxLength={1000}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="A short summary of this page's content."
+            />
           </div>
         </div>
 

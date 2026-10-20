@@ -44,6 +44,7 @@ enum AiBookPlanPageType {
 
 enum AiBookPlanStatus {
   draft
+  generated
 }
 
 model User {
@@ -160,6 +161,7 @@ model Book {
 model AiBookPlan {
   id             String             @id @default(cuid())
   title          String             @db.VarChar(100)
+  kdpDescription String             @default("") @db.Text
   niche          String             @default("") @db.VarChar(100)
   pageCount      Int                @default(32)
   pageSize       AiBookPageSize     @default(letter)
@@ -193,6 +195,7 @@ model AiBookPlanPage {
   pageNumber         Int
   type               AiBookPlanPageType
   prompt             String              @db.Text
+  description        String              @default("") @db.Text
   settings           Json?
   regenerationCount  Int                 @default(0)
   createdAt          DateTime            @default(now())

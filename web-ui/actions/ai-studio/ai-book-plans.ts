@@ -145,6 +145,7 @@ export async function createAiBookPlanAction(
         planData.title,
         planData.initialPrompt,
       ),
+      description: `${type} content for page ${pageNumber}.`,
       settings: getDefaultAiBookPageSettings(type),
     };
   });

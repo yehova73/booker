@@ -40,6 +40,7 @@ export default async function AiBookPlanPage({
     select: {
       id: true,
       title: true,
+      kdpDescription: true,
       niche: true,
       pageCount: true,
       pageSize: true,
@@ -53,6 +54,7 @@ export default async function AiBookPlanPage({
           pageNumber: true,
           type: true,
           prompt: true,
+          description: true,
           settings: true,
           regenerationCount: true,
           updatedAt: true,

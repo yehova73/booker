@@ -49,7 +49,7 @@ export const AI_BOOK_NICHE_OPTIONS = [
 
 export const AI_BOOK_PLAN_PAGE_TYPES = [
   { value: "titlePage", label: "Title Page" },
-  { value: "storyScene", label: "Story + Art" },
+  { value: "storyScene", label: "Story Scene" },
   { value: "activity", label: "Activity" },
   ...AI_STUDIO_PUZZLE_OPTIONS.map((option) => ({
     value: option.value,
