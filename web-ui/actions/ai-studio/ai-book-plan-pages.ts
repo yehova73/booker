@@ -95,8 +95,7 @@ function isAvailablePageType(
   if (type === "titlePage") return pageNumber === 1;
   if (pageNumber === 1) return false;
   if (storyPuzzle && puzzles.length === 0) return type === "storyScene";
-  if (storyPuzzle && pageNumber % 2 === 0) return type === "storyScene";
-  if (storyPuzzle && type === "storyScene") return false;
+  if (storyPuzzle && type === "storyScene") return true;
   if (puzzles.length === 0) return type === "activity";
   if (type === "activity") return false;
   return (
@@ -127,6 +126,11 @@ export async function updateAiBookPlanPageAction(
       id: true,
       planId: true,
       pageNumber: true,
+      type: true,
+      prompt: true,
+      description: true,
+      settings: true,
+      storyStatus: true,
       plan: {
         select: {
           storyPuzzle: true,
@@ -137,6 +141,12 @@ export async function updateAiBookPlanPageAction(
   });
   if (!page) {
     return { status: "error", message: { title: "Page not found." } };
+  }
+  if (page.storyStatus === "generating") {
+    return {
+      status: "error",
+      message: { title: "This story page is currently being generated." },
+    };
   }
   if (
     !isAvailablePageType(
@@ -152,11 +162,7 @@ export async function updateAiBookPlanPageAction(
     };
   }
 
-  const updated = await prisma.aiBookPlanPage.update({
-    where: { id: page.id },
-    data: parsed.value,
-    select: { id: true },
-  });
+  const updated = await savePageUpdate(page, parsed.value);
   revalidatePath(`/dashboard/ai-studio/plan/${page.planId}`);
   return {
     status: "ok",
@@ -188,6 +194,11 @@ export async function regenerateAiBookPlanPageAction(
       id: true,
       planId: true,
       pageNumber: true,
+      type: true,
+      prompt: true,
+      description: true,
+      settings: true,
+      storyStatus: true,
       plan: {
         select: {
           title: true,
@@ -200,6 +211,12 @@ export async function regenerateAiBookPlanPageAction(
   });
   if (!page) {
     return { status: "error", message: { title: "Page not found." } };
+  }
+  if (page.storyStatus === "generating") {
+    return {
+      status: "error",
+      message: { title: "This story page is currently being generated." },
+    };
   }
   if (
     !isAvailablePageType(
@@ -261,14 +278,10 @@ export async function regenerateAiBookPlanPageAction(
     };
   }
 
-  await prisma.aiBookPlanPage.update({
-    where: { id: page.id },
-    data: {
-      ...parsed.value,
-      prompt,
-      regenerationCount: { increment: 1 },
-    },
-  });
+  await savePageUpdate(page, {
+    ...parsed.value,
+    prompt,
+  }, true);
   revalidatePath(`/dashboard/ai-studio/plan/${page.planId}`);
   return {
     status: "ok",
@@ -276,4 +289,64 @@ export async function regenerateAiBookPlanPageAction(
     requireRefresh: true,
     message: { title: "Page prompt regenerated." },
   };
+}
+
+async function savePageUpdate(
+  page: {
+    id: string;
+    planId: string;
+    pageNumber: number;
+    type: AiBookPlanPageType;
+    prompt: string;
+    description: string;
+    settings: unknown;
+  },
+  update: PageUpdateInput,
+  regeneratePrompt = false,
+) {
+  const storyInputChanged =
+    page.type !== update.type ||
+    page.prompt !== update.prompt ||
+    page.description !== update.description ||
+    JSON.stringify(page.settings) !== JSON.stringify(update.settings);
+  const invalidatesStory = storyInputChanged &&
+    (page.type === "storyScene" || update.type === "storyScene");
+
+  return prisma.$transaction(async (transaction) => {
+    const updated = await transaction.aiBookPlanPage.update({
+      where: { id: page.id },
+      data: {
+        ...update,
+        ...(regeneratePrompt
+          ? { regenerationCount: { increment: 1 } }
+          : {}),
+        ...(invalidatesStory
+          ? {
+              storyText: null,
+              continuitySummary: null,
+              storyStatus: "pending",
+              storyError: null,
+            }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (invalidatesStory) {
+      await transaction.aiBookPlanPage.updateMany({
+        where: {
+          planId: page.planId,
+          pageNumber: { gt: page.pageNumber },
+          type: "storyScene",
+          storyStatus: "generated",
+        },
+        data: {
+          storyText: null,
+          continuitySummary: null,
+          storyStatus: "pending",
+          storyError: null,
+        },
+      });
+    }
+    return updated;
+  });
 }

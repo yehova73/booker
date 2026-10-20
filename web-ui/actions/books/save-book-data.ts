@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { isBookDimension, type BookDimension } from "@/lib/book-dimensions";
 import type { ServerActionResponse } from "@/hooks/use-server-action";
+import { isAiBookPlanPageType } from "@/lib/ai-studio";
 
 type ParsedBookData = {
   bookData: Prisma.InputJsonObject;
@@ -214,6 +215,15 @@ function parseBookData(
     ) {
       return { error: "The editor document contains an invalid page type." };
     }
+    if (
+      (page.aiPageType !== undefined &&
+        !isAiBookPlanPageType(page.aiPageType)) ||
+      (page.aiPageDescription !== undefined &&
+        (typeof page.aiPageDescription !== "string" ||
+          page.aiPageDescription.length > 1000))
+    ) {
+      return { error: "The editor document contains invalid AI page metadata." };
+    }
 
     const elements: Prisma.InputJsonValue[] = [];
     for (const element of page.elements) {
@@ -263,6 +273,12 @@ function parseBookData(
       title: page.title,
       elements,
       ...(page.pageType === undefined ? {} : { pageType: page.pageType }),
+      ...(page.aiPageType === undefined
+        ? {}
+        : { aiPageType: page.aiPageType }),
+      ...(page.aiPageDescription === undefined
+        ? {}
+        : { aiPageDescription: page.aiPageDescription }),
     };
     pages.push(pageData);
     pageIds.add(page.id);

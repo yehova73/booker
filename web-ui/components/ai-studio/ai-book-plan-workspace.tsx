@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
@@ -15,6 +16,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { PageSettingsDialog } from "@/components/ai-studio/page-settings-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {
   EditablePlanPage,
   PageTypeOption,
@@ -23,18 +41,33 @@ import { useServerAction } from "@/hooks/use-server-action";
 import {
   AI_BOOK_PAGE_SIZES,
   AI_BOOK_PLAN_PAGE_TYPES,
+  AI_BOOK_STORY_WORD_LIMIT,
   AI_STUDIO_PUZZLE_OPTIONS,
   getDefaultAiBookPageSettings,
 } from "@/lib/ai-studio";
 import { updateAiBookPlanPageAction } from "@/actions/ai-studio/ai-book-plan-pages";
 import { generateAiBookBlueprintAction } from "@/actions/ai-studio/ai-book-blueprints";
+import {
+  createAiBookFromPlanAction,
+  generateNextAiBookStoryPageAction,
+  setAiBookPlanStoryWordLimitAction,
+} from "@/actions/ai-studio/story-book-generation";
 import type {
   AiBookPageSize,
   AiBookPlanPageType,
   AiBookPuzzleType,
+  AiBookStoryPageStatus,
 } from "@/generated/prisma/client";
 
-type PlanPage = EditablePlanPage & { updatedAt: string };
+type PlanPage = EditablePlanPage & {
+  updatedAt: string;
+  storyText: string | null;
+  continuitySummary: string | null;
+  storyStatus: AiBookStoryPageStatus;
+  storyError: string | null;
+};
+type CollectionOption = { id: string; title: string };
+type GeneratedBook = { id: string; title: string; createdAt: string };
 type AiBookPlanWorkspaceData = {
   id: string;
   title: string;
@@ -42,11 +75,14 @@ type AiBookPlanWorkspaceData = {
   niche: string;
   pageCount: number;
   pageSize: AiBookPageSize;
+  storyMaxWordsPerPage: number;
   initialPrompt: string;
   storyPuzzle: boolean;
   status: string;
   puzzles: AiBookPuzzleType[];
   pages: PlanPage[];
+  generatedBooks: GeneratedBook[];
+  collections: CollectionOption[];
 };
 
 type WorkspaceView = "spread" | "grid";
@@ -56,17 +92,46 @@ export function AiBookPlanWorkspace({
 }: {
   plan: AiBookPlanWorkspaceData;
 }) {
+  const router = useRouter();
+  const collectionSelectId = useId();
+  const maxWordsInputId = useId();
   const [view, setView] = useState<WorkspaceView>("spread");
   const [selectedPageId, setSelectedPageId] = useState(
     plan.pages[0]?.id ?? "",
   );
   const [editingPageId, setEditingPageId] = useState("");
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [collectionId, setCollectionId] = useState(
+    plan.collections[0]?.id ?? "",
+  );
+  const [maxWordsPerPage, setMaxWordsPerPage] = useState(
+    String(plan.storyMaxWordsPerPage),
+  );
+  const [generationProgress, setGenerationProgress] = useState<{
+    completed: number;
+    total: number;
+    pageNumber?: number;
+  } | null>(null);
   const { call: updatePage, loading: isSwapping } = useServerAction(
     updateAiBookPlanPageAction,
   );
   const { call: generateBlueprint, loading: isGenerating } = useServerAction(
     generateAiBookBlueprintAction,
   );
+  const { call: generateStoryPage, loading: isGeneratingStory } =
+    useServerAction(generateNextAiBookStoryPageAction);
+  const { call: createBook, loading: isCreatingBook } = useServerAction(
+    createAiBookFromPlanAction,
+  );
+  const { call: setStoryWordLimit, loading: isSettingWordLimit } =
+    useServerAction(setAiBookPlanStoryWordLimitAction);
+  const parsedMaxWordsPerPage = Number(maxWordsPerPage);
+  const isMaxWordsPerPageValid =
+    Number.isSafeInteger(parsedMaxWordsPerPage) &&
+    parsedMaxWordsPerPage >= AI_BOOK_STORY_WORD_LIMIT.minimum &&
+    parsedMaxWordsPerPage <= AI_BOOK_STORY_WORD_LIMIT.maximum;
+  const isGeneratingBook =
+    isGeneratingStory || isCreatingBook || isSettingWordLimit;
   const selectedPage =
     plan.pages.find((page) => page.id === selectedPageId) ?? plan.pages[0];
   const editingPage = plan.pages.find((page) => page.id === editingPageId);
@@ -76,6 +141,34 @@ export function AiBookPlanWorkspace({
   const pageTypeOptions = (pageNumber: number) =>
     getAvailablePageTypes(plan, pageNumber);
   const spreads = useMemo(() => getPageSpreads(plan.pages), [plan.pages]);
+
+  async function generateBook() {
+    if (!collectionId || !isMaxWordsPerPageValid) return;
+    const configuredLimit = await setStoryWordLimit(
+      plan.id,
+      parsedMaxWordsPerPage,
+    );
+    if (!configuredLimit) return;
+    setGenerationProgress(null);
+
+    while (true) {
+      const progress = await generateStoryPage(plan.id);
+      if (!progress) return;
+      setGenerationProgress({
+        completed: progress.completedStoryPages,
+        total: progress.totalStoryPages,
+        pageNumber: progress.generatedPageNumber,
+      });
+      if (!progress.complete) continue;
+
+      const book = await createBook(plan.id, collectionId);
+      if (book) {
+        setGenerateDialogOpen(false);
+        router.push(`/editor/${book.id}`);
+      }
+      return;
+    }
+  }
 
   async function swapPageType(page: PlanPage) {
     const types = pageTypeOptions(page.pageNumber);
@@ -115,8 +208,28 @@ export function AiBookPlanWorkspace({
               <Sparkles className="size-3.5" />
               {plan.status}
             </span>
+            {plan.generatedBooks[0] && (
+              <Button
+                type="button"
+                variant="outline"
+                render={<Link href={`/editor/${plan.generatedBooks[0].id}`} />}
+              >
+                <BookOpen />
+                Open Latest
+              </Button>
+            )}
             <Button
               type="button"
+              onClick={() => setGenerateDialogOpen(true)}
+            >
+              <BookOpen />
+              {plan.generatedBooks.length > 0
+                ? "Generate Another Book"
+                : "Generate Book"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               disabled={isGenerating}
               onClick={() => generateBlueprint(plan.id)}
             >
@@ -283,6 +396,29 @@ export function AiBookPlanWorkspace({
                     {selectedPage.description}
                   </p>
                 )}
+                {selectedPage.type === "storyScene" && (
+                  <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium">Story page</p>
+                      <span className="text-xs capitalize text-muted-foreground">
+                        {selectedPage.storyStatus}
+                      </span>
+                    </div>
+                    {selectedPage.storyText ? (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+                        {selectedPage.storyText}
+                      </p>
+                    ) : selectedPage.storyError ? (
+                      <p className="mt-2 text-sm text-destructive">
+                        {selectedPage.storyError}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Story prose will be generated when you create the book.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                   {selectedPage.prompt}
                 </p>
@@ -315,6 +451,37 @@ export function AiBookPlanWorkspace({
               </p>
             </section>
           )}
+
+          {plan.generatedBooks.length > 0 && (
+            <section className="rounded-xl border bg-card p-5">
+              <h2 className="font-semibold">Books from this blueprint</h2>
+              <ul className="mt-3 space-y-2">
+                {plan.generatedBooks.map((book, index) => (
+                  <li key={book.id}>
+                    <Link
+                      href={`/editor/${book.id}`}
+                      className="flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted"
+                    >
+                      <span className="min-w-0 truncate">
+                        {book.title}
+                        {index === 0 && (
+                          <span className="ml-2 text-xs text-primary">
+                            Latest
+                          </span>
+                        )}
+                      </span>
+                      <time
+                        dateTime={book.createdAt}
+                        className="shrink-0 text-xs text-muted-foreground"
+                      >
+                        {book.createdAt.slice(0, 10)}
+                      </time>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </aside>
       </div>
 
@@ -329,6 +496,165 @@ export function AiBookPlanWorkspace({
           }}
         />
       )}
+
+      <Dialog
+        open={generateDialogOpen}
+        onOpenChange={(open) => {
+          if (!isGeneratingBook) setGenerateDialogOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {plan.generatedBooks.length > 0
+                ? "Generate another book"
+                : "Generate your book"}
+            </DialogTitle>
+            <DialogDescription>
+              Create a separate editable book from this blueprint. Existing
+              books remain unchanged. Story pages will be written in page order
+              and continue from the previous story page; other pages keep their
+              blueprint details.
+            </DialogDescription>
+          </DialogHeader>
+          {plan.collections.length === 0 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Create a collection before generating a book.
+              </p>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setGenerateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  render={<Link href="/dashboard/collections" />}
+                >
+                  Create a collection
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor={collectionSelectId}>Collection</Label>
+                <Select
+                  value={collectionId}
+                  onValueChange={(value) => setCollectionId(value ?? "")}
+                  disabled={isGeneratingBook}
+                >
+                  <SelectTrigger id={collectionSelectId} className="w-full">
+                    <SelectValue placeholder="Choose a collection" />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {plan.collections.map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id}>
+                        {collection.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={maxWordsInputId}>
+                  Maximum words per story page
+                </Label>
+                <Input
+                  id={maxWordsInputId}
+                  type="number"
+                  min={AI_BOOK_STORY_WORD_LIMIT.minimum}
+                  max={AI_BOOK_STORY_WORD_LIMIT.maximum}
+                  step={1}
+                  value={maxWordsPerPage}
+                  disabled={isGeneratingBook}
+                  aria-invalid={!isMaxWordsPerPageValid}
+                  onChange={(event) =>
+                    setMaxWordsPerPage(event.currentTarget.value)
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Choose {AI_BOOK_STORY_WORD_LIMIT.minimum}–
+                  {AI_BOOK_STORY_WORD_LIMIT.maximum} words. Changing the saved
+                  limit clears existing story text so every page uses the same
+                  maximum.
+                </p>
+                {!isMaxWordsPerPageValid && (
+                  <p className="text-xs text-destructive">
+                    Enter a whole number from{" "}
+                    {AI_BOOK_STORY_WORD_LIMIT.minimum} to{" "}
+                    {AI_BOOK_STORY_WORD_LIMIT.maximum}.
+                  </p>
+                )}
+              </div>
+              {generationProgress && (
+                <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span>
+                      {generationProgress.pageNumber
+                        ? `Generated story page ${generationProgress.pageNumber}`
+                        : "Generating story pages"}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {generationProgress.completed}/
+                      {generationProgress.total}
+                    </span>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={generationProgress.total || 1}
+                    aria-valuenow={generationProgress.completed}
+                    className="h-2 overflow-hidden rounded-full bg-muted"
+                  >
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{
+                        width: `${
+                          generationProgress.total
+                            ? (generationProgress.completed /
+                                generationProgress.total) *
+                              100
+                            : 100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isGeneratingBook}
+                  onClick={() => setGenerateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={
+                    isGeneratingBook ||
+                    !collectionId ||
+                    !isMaxWordsPerPageValid
+                  }
+                  onClick={generateBook}
+                >
+                  {isGeneratingBook ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <Sparkles />
+                  )}
+                  {isGeneratingBook ? "Generating..." : "Generate Book"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
@@ -355,7 +681,7 @@ function PageCard({
   const spreadLabel = storyPuzzle
     ? page.type === "storyScene"
       ? "Story Scene"
-      : page.pageNumber % 2 === 1 && page.pageNumber > 1
+      : page.type !== "titlePage"
         ? "Activity / Puzzle"
         : null
     : null;
@@ -386,12 +712,17 @@ function PageCard({
         <span className="mt-2 rounded-md bg-muted px-2 py-1 text-xs font-medium">
           {getPageTypeLabel(page.type)}
         </span>
+        {page.type === "storyScene" && (
+          <span className="mt-2 text-[11px] font-medium capitalize text-primary">
+            Story {page.storyStatus}
+          </span>
+        )}
         <span
           className={`mt-3 text-sm leading-5 text-muted-foreground ${
             compact ? "line-clamp-3" : "line-clamp-4"
           }`}
         >
-          {page.description || page.prompt}
+          {page.storyText || page.description || page.prompt}
         </span>
       </button>
       <div className="flex gap-2 border-t px-3 py-2 transition-opacity lg:absolute lg:inset-x-2 lg:top-2 lg:justify-end lg:border-0 lg:p-0 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100">
@@ -444,9 +775,11 @@ function getAvailablePageTypes(
       (option) => option.value === "storyScene",
     );
   }
-  if (plan.storyPuzzle && pageNumber % 2 === 0) {
+  if (plan.storyPuzzle) {
     return AI_BOOK_PLAN_PAGE_TYPES.filter(
-      (option) => option.value === "storyScene",
+      (option) =>
+        option.value === "storyScene" ||
+        plan.puzzles.some((puzzle) => puzzle === option.value),
     );
   }
   if (plan.puzzles.length === 0) {

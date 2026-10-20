@@ -45,8 +45,8 @@ function parseBookInput(
   if (title.trim().length > 100) {
     return { error: "Book titles must be 100 characters or fewer." };
   }
-  if (typeof description !== "string" || description.length > 1000) {
-    return { error: "Descriptions must be 1,000 characters or fewer." };
+  if (typeof description !== "string" || description.length > 4000) {
+    return { error: "Descriptions must be 4,000 characters or fewer." };
   }
   if (!isBookDimension(dimension)) {
     return { error: "Choose a valid book dimension." };

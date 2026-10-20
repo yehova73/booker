@@ -47,6 +47,12 @@ export const AI_BOOK_NICHE_OPTIONS = [
   "Travel & Adventure",
 ] as const;
 
+export const AI_BOOK_STORY_WORD_LIMIT = {
+  default: 120,
+  minimum: 1,
+  maximum: 500,
+} as const;
+
 export const AI_BOOK_PLAN_PAGE_TYPES = [
   { value: "titlePage", label: "Title Page" },
   { value: "storyScene", label: "Story Scene" },
@@ -61,6 +67,15 @@ export const AI_BOOK_PLAN_PAGE_TYPES = [
 }[];
 
 export type AiBookPageSettings = Record<string, string | number | boolean>;
+
+export function isAiBookPlanPageType(
+  value: unknown,
+): value is AiBookPlanPageType {
+  return (
+    typeof value === "string" &&
+    AI_BOOK_PLAN_PAGE_TYPES.some((option) => option.value === value)
+  );
+}
 
 export function getDefaultAiBookPageSettings(
   type: AiBookPlanPageType,

@@ -1,0 +1,17 @@
+OPENAI_API_KEY=""
+
+
+DATABASE_URL=""
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="replace-with-a-long-random-secret"
+
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+EMAIL_SERVER="smtp://USER:PASSWORD@smtp.example.com:587"
+EMAIL_FROM="Booker <no-reply@example.com>"
+
+AWS_REGION=""
+S3_BUCKET_NAME=""
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY=""

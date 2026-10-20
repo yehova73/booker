@@ -62,6 +62,7 @@ import { generateWordSearches } from "./word-search-utils";
 import { withWordSearchSolutionColors } from "./components/word-search-colors";
 import { generateMazes } from "./maze-utils";
 import { saveBookDataAction } from "@/actions/books/save-book-data";
+import { isAiBookPlanPageType } from "@/lib/ai-studio";
 
 const defaultImageFilters: ImageFilterSettings = {
   brightness: 100,
@@ -1482,6 +1483,12 @@ function normalizeDocument(value: unknown): EditorDocument | null {
       pageValue.pageType === "puzzle-solutions"
         ? { pageType: pageValue.pageType }
         : {}),
+      ...(isAiBookPlanPageType(pageValue.aiPageType)
+        ? { aiPageType: pageValue.aiPageType }
+        : {}),
+      ...(typeof pageValue.aiPageDescription === "string"
+        ? { aiPageDescription: pageValue.aiPageDescription }
+        : {}),
       elements,
     });
   }
@@ -2066,6 +2073,10 @@ function isEditorPage(value: unknown): value is EditorPage {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.title === "string" &&
+    (value.aiPageType === undefined ||
+      isAiBookPlanPageType(value.aiPageType)) &&
+    (value.aiPageDescription === undefined ||
+      typeof value.aiPageDescription === "string") &&
     (value.pageType === undefined ||
       value.pageType === "sudoku-solutions" ||
       value.pageType === "puzzle-solutions") &&

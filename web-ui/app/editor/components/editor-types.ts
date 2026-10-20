@@ -1,3 +1,5 @@
+import type { AiBookPlanPageType } from "@/generated/prisma/client";
+
 export type TrimPreset = "letter" | "paperback" | "square";
 export type ZoomLevel = "50%" | "75%" | "100%" | "Fit";
 export type SpreadMode = "single" | "spread";
@@ -298,6 +300,8 @@ export type EditorPage = {
   id: string;
   title: string;
   pageType?: "sudoku-solutions" | "puzzle-solutions";
+  aiPageType?: AiBookPlanPageType;
+  aiPageDescription?: string;
   elements: EditorElement[];
 };
 

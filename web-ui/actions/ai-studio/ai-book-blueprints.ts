@@ -195,6 +195,10 @@ export async function generateAiBookBlueprintAction(
           prompt: page.prompt,
           description: page.description,
           settings: page.settings,
+          storyText: null,
+          continuitySummary: null,
+          storyStatus: "pending",
+          storyError: null,
           regenerationCount: 0,
         },
       });

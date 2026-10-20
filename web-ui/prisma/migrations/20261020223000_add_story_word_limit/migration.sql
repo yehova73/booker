@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "AiBookPlan"
+ADD COLUMN "storyMaxWordsPerPage" INTEGER NOT NULL DEFAULT 120;

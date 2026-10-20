@@ -304,7 +304,7 @@ function BookDetailsDialog({
             <Label htmlFor={descriptionId}>Description</Label>
             <Textarea
               id={descriptionId}
-              maxLength={1000}
+              maxLength={4000}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />

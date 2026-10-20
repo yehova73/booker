@@ -42,6 +42,13 @@ enum AiBookPlanPageType {
   coloringPage
 }
 
+enum AiBookStoryPageStatus {
+  pending
+  generating
+  generated
+  failed
+}
+
 enum AiBookPlanStatus {
   draft
   generated
@@ -140,98 +147,107 @@ model Collection {
 }
 
 model Book {
-  id           String        @id @default(cuid())
-  title        String        @db.VarChar(100)
-  description  String        @default("") @db.Text
-  dimension    BookDimension @default(paperback)
+  id           String          @id @default(cuid())
+  title        String          @db.VarChar(100)
+  description  String          @default("") @db.Text
+  dimension    BookDimension   @default(paperback)
   bookData     Json?
-  coverId      String?       @unique
+  coverId      String?         @unique
   coverPageId  String?
   collectionId String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  collection   Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  cover        File?         @relation("BookCover", fields: [coverId], references: [id], onDelete: SetNull)
+  aiBookPlanId String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  collection   Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  aiBookPlan   AiBookPlan?     @relation("AiBookPlanBook", fields: [aiBookPlanId], references: [id], onDelete: SetNull)
+  cover        File?           @relation("BookCover", fields: [coverId], references: [id], onDelete: SetNull)
   files        File[]
   kdpExports   BookKdpExport[]
 
+  @@index([aiBookPlanId])
   @@index([collectionId, createdAt])
 }
 
 model AiBookPlan {
-  id             String             @id @default(cuid())
-  title          String             @db.VarChar(100)
-  kdpDescription String             @default("") @db.Text
-  niche          String             @default("") @db.VarChar(100)
-  pageCount      Int                @default(32)
-  pageSize       AiBookPageSize     @default(letter)
-  initialPrompt  String             @db.Text
-  storyPuzzle    Boolean            @default(false)
-  status         AiBookPlanStatus   @default(draft)
-  userId         String
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  puzzles        AiBookPlanPuzzle[]
-  pages          AiBookPlanPage[]
+  id                   String             @id @default(cuid())
+  title                String             @db.VarChar(100)
+  kdpDescription       String             @default("") @db.Text
+  niche                String             @default("") @db.VarChar(100)
+  pageCount            Int                @default(32)
+  pageSize             AiBookPageSize     @default(letter)
+  storyMaxWordsPerPage Int                @default(120)
+  initialPrompt        String             @db.Text
+  storyPuzzle          Boolean            @default(false)
+  status               AiBookPlanStatus   @default(draft)
+  userId               String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzles              AiBookPlanPuzzle[]
+  pages                AiBookPlanPage[]
+  generatedBooks       Book[]             @relation("AiBookPlanBook")
 
   @@index([userId, createdAt])
 }
 
 model AiBookPlanPuzzle {
-  id        String          @id @default(cuid())
+  id        String           @id @default(cuid())
   planId    String
   type      AiBookPuzzleType
-  createdAt DateTime        @default(now())
-  plan      AiBookPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  plan      AiBookPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, type])
   @@index([planId])
 }
 
 model AiBookPlanPage {
-  id                 String              @id @default(cuid())
-  planId             String
-  pageNumber         Int
-  type               AiBookPlanPageType
-  prompt             String              @db.Text
-  description        String              @default("") @db.Text
-  settings           Json?
-  regenerationCount  Int                 @default(0)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  plan               AiBookPlan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+  id                String                @id @default(cuid())
+  planId            String
+  pageNumber        Int
+  type              AiBookPlanPageType
+  prompt            String                @db.Text
+  description       String                @default("") @db.Text
+  settings          Json?
+  storyText         String?               @db.Text
+  continuitySummary String?               @db.Text
+  storyStatus       AiBookStoryPageStatus @default(pending)
+  storyError        String?               @db.Text
+  regenerationCount Int                   @default(0)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  plan              AiBookPlan            @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, pageNumber])
   @@index([planId, pageNumber])
 }
 
 model File {
-  id           String   @id @default(cuid())
+  id           String         @id @default(cuid())
   userId       String
-  storageKey   String   @unique
-  originalName String   @db.VarChar(255)
-  contentType  String   @db.VarChar(100)
+  storageKey   String         @unique
+  originalName String         @db.VarChar(255)
+  contentType  String         @db.VarChar(100)
   size         Int
-  bookCover    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookCover    Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   books        Book[]
-  coverForBook Book?    @relation("BookCover")
+  coverForBook Book?          @relation("BookCover")
   kdpExport    BookKdpExport?
 
   @@index([userId, createdAt])
 }
 
 model BookKdpExport {
-  id           String       @id @default(cuid())
+  id           String        @id @default(cuid())
   bookId       String
-  fileId       String       @unique
+  fileId       String        @unique
   trimPreset   BookDimension
-  bleedEnabled Boolean      @default(false)
-  createdAt    DateTime     @default(now())
-  book         Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  file         File         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  bleedEnabled Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  book         Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  file         File          @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@index([bookId, createdAt])
 }

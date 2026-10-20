@@ -35,34 +35,51 @@ export default async function AiBookPlanPage({
   }
 
   const { id } = await params;
-  const plan = await prisma.aiBookPlan.findFirst({
-    where: { id, userId: session.user.id },
-    select: {
-      id: true,
-      title: true,
-      kdpDescription: true,
-      niche: true,
-      pageCount: true,
-      pageSize: true,
-      initialPrompt: true,
-      storyPuzzle: true,
-      status: true,
-      puzzles: { select: { type: true }, orderBy: { createdAt: "asc" } },
-      pages: {
-        select: {
-          id: true,
-          pageNumber: true,
-          type: true,
-          prompt: true,
-          description: true,
-          settings: true,
-          regenerationCount: true,
-          updatedAt: true,
+  const [plan, collections] = await Promise.all([
+    prisma.aiBookPlan.findFirst({
+      where: { id, userId: session.user.id },
+      select: {
+        id: true,
+        title: true,
+        kdpDescription: true,
+        niche: true,
+        pageCount: true,
+        pageSize: true,
+        storyMaxWordsPerPage: true,
+        initialPrompt: true,
+        storyPuzzle: true,
+        status: true,
+        generatedBooks: {
+          select: { id: true, title: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 5,
         },
-        orderBy: { pageNumber: "asc" },
+        puzzles: { select: { type: true }, orderBy: { createdAt: "asc" } },
+        pages: {
+          select: {
+            id: true,
+            pageNumber: true,
+            type: true,
+            prompt: true,
+            description: true,
+            settings: true,
+            regenerationCount: true,
+            storyText: true,
+            continuitySummary: true,
+            storyStatus: true,
+            storyError: true,
+            updatedAt: true,
+          },
+          orderBy: { pageNumber: "asc" },
+        },
       },
-    },
-  });
+    }),
+    prisma.collection.findMany({
+      where: { userId: session.user.id },
+      select: { id: true, title: true },
+      orderBy: { title: "asc" },
+    }),
+  ]);
   if (!plan) notFound();
 
   return (
@@ -70,6 +87,11 @@ export default async function AiBookPlanPage({
       plan={{
         ...plan,
         puzzles: plan.puzzles.map(({ type }) => type),
+        generatedBooks: plan.generatedBooks.map((book) => ({
+          ...book,
+          createdAt: book.createdAt.toISOString(),
+        })),
+        collections,
         pages: plan.pages.map((page) => ({
           ...page,
           settings: getPageSettings(page.settings),
