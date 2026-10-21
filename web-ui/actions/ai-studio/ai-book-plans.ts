@@ -16,6 +16,8 @@ import type {
   AiBookPlanPageType,
   AiBookPuzzleType,
 } from "@/generated/prisma/client";
+import type { NewBookPuzzleSettings } from "@/components/ai-studio/new-book-types";
+import type { MazeDifficulty, SudokuDifficulty } from "@/app/editor/components/editor-types";
 
 type NewAiBookPlan = {
   title: string;
@@ -25,12 +27,118 @@ type NewAiBookPlan = {
   initialPrompt: string;
   selectedPuzzles: AiBookPuzzleType[];
   storyPuzzle: boolean;
+  puzzleSettings: NewBookPuzzleSettings;
 };
 
 type AiBookPlanResult = { id: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const sudokuDifficulties: SudokuDifficulty[] = [
+  "easy",
+  "medium",
+  "hard",
+  "insane",
+];
+const mazeDifficulties: MazeDifficulty[] = [
+  "easy",
+  "medium",
+  "hard",
+  "insane",
+];
+
+function parseDifficulties<T extends string>(
+  value: unknown,
+  allowed: T[],
+): T[] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed = value.filter(
+    (item): item is T =>
+      typeof item === "string" && allowed.includes(item as T),
+  );
+  return parsed.length === value.length ? [...new Set(parsed)] : null;
+}
+
+function parsePuzzleSettings(
+  value: unknown,
+  selectedPuzzles: AiBookPuzzleType[],
+): NewBookPuzzleSettings | null {
+  if (!isRecord(value)) return null;
+  const selected = new Set(selectedPuzzles);
+  const sudoku = isRecord(value.sudoku) ? value.sudoku : {};
+  const sudokuSquares = Number(sudoku.squares);
+  const sudokuLevels = parseDifficulties(sudoku.difficulties, sudokuDifficulties);
+  const validSudoku =
+    [2, 3, 4, 5].includes(sudokuSquares) && sudokuLevels !== null;
+  if (selected.has("sudoku") && !validSudoku) return null;
+
+  const wordSearch = isRecord(value.wordSearch) ? value.wordSearch : {};
+  const wordsAreValid =
+    Array.isArray(wordSearch.words) &&
+    wordSearch.words.every((word) => typeof word === "string");
+  const words = wordsAreValid
+    ? [...new Set(
+        (wordSearch.words as string[])
+          .map((word) => word.replace(/[^a-z]/gi, "").toUpperCase())
+          .filter(Boolean),
+      )]
+    : [];
+  const validWordSearch =
+    isIntegerInRange(wordSearch.rows, 5, 30) &&
+    isIntegerInRange(wordSearch.cols, 5, 30) &&
+    isIntegerInRange(wordSearch.maxWords, 1, 100) &&
+    typeof wordSearch.dictionaryName === "string" &&
+    Boolean(wordSearch.dictionaryName.trim()) &&
+    wordSearch.dictionaryName.length <= 100 &&
+    wordsAreValid &&
+    words.length > 0 &&
+    words.length <= 1000 &&
+    words.some(
+      (word) =>
+        word.length <=
+        Math.max(Number(wordSearch.rows), Number(wordSearch.cols)),
+    );
+  if (selected.has("wordSearch") && !validWordSearch) return null;
+
+  const maze = isRecord(value.maze) ? value.maze : {};
+  const mazeLevels = parseDifficulties(maze.difficulties, mazeDifficulties);
+  const validMaze =
+    isIntegerInRange(maze.rows, 5, 40) &&
+    isIntegerInRange(maze.cols, 5, 40) &&
+    mazeLevels !== null;
+  if (selected.has("maze") && !validMaze) return null;
+
+  return {
+    sudoku: {
+      squares: validSudoku ? (sudokuSquares as 2 | 3 | 4 | 5) : 3,
+      difficulties: sudokuLevels ?? ["medium"],
+    },
+    wordSearch: {
+      rows: validWordSearch ? Number(wordSearch.rows) : 15,
+      cols: validWordSearch ? Number(wordSearch.cols) : 15,
+      dictionaryName: validWordSearch
+        ? String(wordSearch.dictionaryName).trim()
+        : "Custom",
+      words: validWordSearch ? words : ["BOOK", "PAGE", "PUZZLE", "FUN", "WORD"],
+      maxWords: validWordSearch ? Number(wordSearch.maxWords) : 5,
+    },
+    maze: {
+      rows: validMaze ? Number(maze.rows) : 15,
+      cols: validMaze ? Number(maze.cols) : 15,
+      difficulties: mazeLevels ?? ["medium"],
+    },
+  };
+}
+
+function isIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= min &&
+    value <= max
+  );
 }
 
 function parsePlanInput(
@@ -48,6 +156,7 @@ function parsePlanInput(
     initialPrompt,
     selectedPuzzles,
     storyPuzzle,
+    puzzleSettings,
   } = input;
 
   if (typeof title !== "string" || !title.trim()) {
@@ -98,6 +207,26 @@ function parsePlanInput(
   if (typeof storyPuzzle !== "boolean") {
     return { error: "Choose whether to include Story Puzzle." };
   }
+  const uniquePuzzleTypes = [...new Set(puzzleTypes)];
+  const parsedPuzzleSettings = parsePuzzleSettings(
+    puzzleSettings,
+    uniquePuzzleTypes,
+  );
+  if (!parsedPuzzleSettings) {
+    return { error: "Choose valid settings for the selected puzzle types." };
+  }
+  if (
+    puzzleTypes.includes("sudoku") &&
+    parsedPuzzleSettings.sudoku.difficulties.length === 0
+  ) {
+    return { error: "Choose at least one Sudoku difficulty." };
+  }
+  if (
+    puzzleTypes.includes("maze") &&
+    parsedPuzzleSettings.maze.difficulties.length === 0
+  ) {
+    return { error: "Choose at least one Maze difficulty." };
+  }
 
   return {
     value: {
@@ -106,8 +235,9 @@ function parsePlanInput(
       pageCount,
       pageSize: pageSizeOption.value,
       initialPrompt: initialPrompt.trim(),
-      selectedPuzzles: [...new Set(puzzleTypes)],
+      selectedPuzzles: uniquePuzzleTypes,
       storyPuzzle,
+      puzzleSettings: parsedPuzzleSettings,
     },
   };
 }
@@ -128,7 +258,8 @@ export async function createAiBookPlanAction(
     };
   }
 
-  const { selectedPuzzles, ...planData } = parsed.value;
+  const { selectedPuzzles, puzzleSettings, ...planData } = parsed.value;
+  const settingsByTypeIndex = new Map<AiBookPuzzleType, number>();
   const pages = Array.from({ length: planData.pageCount }, (_, index) => {
     const pageNumber = index + 1;
     const type = getInitialPageType(
@@ -146,7 +277,11 @@ export async function createAiBookPlanAction(
         planData.initialPrompt,
       ),
       description: `${type} content for page ${pageNumber}.`,
-      settings: getDefaultAiBookPageSettings(type),
+      settings: getInitialPageSettings(
+        type,
+        puzzleSettings,
+        settingsByTypeIndex,
+      ),
     };
   });
   const plan = await prisma.aiBookPlan.create({
@@ -167,6 +302,46 @@ export async function createAiBookPlanAction(
     data: plan,
     message: { title: "Blueprint draft created." },
   };
+}
+
+function getInitialPageSettings(
+  type: AiBookPlanPageType,
+  puzzleSettings: NewBookPuzzleSettings,
+  settingsByTypeIndex: Map<AiBookPuzzleType, number>,
+) {
+  if (type === "sudoku") {
+    const index = settingsByTypeIndex.get(type) ?? 0;
+    settingsByTypeIndex.set(type, index + 1);
+    const difficulties = puzzleSettings.sudoku.difficulties;
+    return {
+      squares: puzzleSettings.sudoku.squares,
+      difficulty: difficulties[index % difficulties.length] ?? "easy",
+      difficultyOptions: difficulties.join(","),
+    };
+  }
+  if (type === "maze") {
+    const index = settingsByTypeIndex.get(type) ?? 0;
+    settingsByTypeIndex.set(type, index + 1);
+    const difficulties = puzzleSettings.maze.difficulties;
+    return {
+      rows: puzzleSettings.maze.rows,
+      cols: puzzleSettings.maze.cols,
+      difficulty: difficulties[index % difficulties.length] ?? "medium",
+      difficultyOptions: difficulties.join(","),
+    };
+  }
+  if (type === "wordSearch") {
+    const { rows, cols, dictionaryName, words, maxWords } =
+      puzzleSettings.wordSearch;
+    return {
+      rows,
+      cols,
+      dictionaryName,
+      words: words.join(" "),
+      maxWords,
+    };
+  }
+  return getDefaultAiBookPageSettings(type);
 }
 
 function getInitialPageType(

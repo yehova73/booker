@@ -13,12 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import useServerAction from "@/hooks/use-server-action";
 import type { AiBookPageSize } from "@/generated/prisma/client";
+import { WORD_SEARCH_DICTIONARIES } from "@/app/editor/components/word-search-dictionaries";
 import { ContentSelectionStep } from "./content-selection-step";
 import { ProjectMetadataStep } from "./project-metadata-step";
+import { PuzzleSettingsStep } from "./puzzle-settings-step";
 import type {
   NewBookContentSelection,
   NewBookMetadata,
 } from "./new-book-types";
+
+const initialWordSearchDictionary = WORD_SEARCH_DICTIONARIES[0];
 
 const initialMetadata: NewBookMetadata = {
   title: "",
@@ -31,6 +35,17 @@ const initialMetadata: NewBookMetadata = {
 const initialContent: NewBookContentSelection = {
   selectedPuzzles: [],
   storyPuzzle: false,
+  puzzleSettings: {
+    sudoku: { squares: 3, difficulties: ["easy"] },
+    wordSearch: {
+      rows: 15,
+      cols: 15,
+      dictionaryName: initialWordSearchDictionary?.name ?? "Nature",
+      words: initialWordSearchDictionary?.words ?? [],
+      maxWords: 12,
+    },
+    maze: { rows: 15, cols: 15, difficulties: ["medium"] },
+  },
 };
 
 export function NewBookModal({
@@ -41,12 +56,17 @@ export function NewBookModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [metadata, setMetadata] = useState(initialMetadata);
   const [content, setContent] = useState(initialContent);
   const { call: createPlan, loading: isCreating } = useServerAction(
     createAiBookPlanAction,
   );
+  const hasPuzzleSettings = content.selectedPuzzles.some(
+    (puzzle) =>
+      puzzle === "sudoku" || puzzle === "wordSearch" || puzzle === "maze",
+  );
+  const totalSteps = hasPuzzleSettings ? 3 : 2;
 
   async function generateBlueprint() {
     const plan = await createPlan({ ...metadata, ...content });
@@ -66,23 +86,35 @@ export function NewBookModal({
         <DialogHeader className="border-b px-5 py-5 pr-12 sm:px-7">
           <div className="mb-1 flex items-center gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Step {step} of 2
+              Step {Math.min(step, totalSteps)} of {totalSteps}
             </span>
             <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <span
                 className={`block h-full rounded-full bg-primary transition-all ${
-                  step === 1 ? "w-1/2" : "w-full"
+                  step === 1
+                    ? totalSteps === 3
+                      ? "w-1/3"
+                      : "w-1/2"
+                    : step === 2 && totalSteps === 3
+                      ? "w-2/3"
+                      : "w-full"
                 }`}
               />
             </span>
           </div>
           <DialogTitle>
-            {step === 1 ? "Project Metadata & Specs" : "Content & Puzzle Selection"}
+            {step === 1
+              ? "Project Metadata & Specs"
+              : step === 2
+                ? "Content & Puzzle Selection"
+                : "Puzzle Settings"}
           </DialogTitle>
           <DialogDescription>
             {step === 1
               ? "Set up the details and print specifications for your AI book."
-              : "Choose the puzzle and activity types for your blueprint."}
+              : step === 2
+                ? "Choose the puzzle and activity types for your blueprint."
+                : "Choose the settings to apply to puzzle pages in your blueprint."}
           </DialogDescription>
         </DialogHeader>
 
@@ -95,13 +127,26 @@ export function NewBookModal({
               }
               onNext={() => setStep(2)}
             />
-          ) : (
+          ) : step === 2 ? (
             <ContentSelectionStep
               value={content}
               onChange={(updates) =>
                 setContent((current) => ({ ...current, ...updates }))
               }
               onBack={() => setStep(1)}
+              onNext={() => setStep(3)}
+              onGenerate={generateBlueprint}
+              hasPuzzleSettings={hasPuzzleSettings}
+              isGenerating={isCreating}
+            />
+          ) : (
+            <PuzzleSettingsStep
+              metadata={metadata}
+              value={content}
+              onChange={(updates) =>
+                setContent((current) => ({ ...current, ...updates }))
+              }
+              onBack={() => setStep(2)}
               onGenerate={generateBlueprint}
               isGenerating={isCreating}
             />

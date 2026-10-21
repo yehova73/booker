@@ -80,10 +80,31 @@ export function isAiBookPlanPageType(
 export function getDefaultAiBookPageSettings(
   type: AiBookPlanPageType,
 ): AiBookPageSettings {
-  if (type === "sudoku" || type === "maze") {
-    return { difficulty: "medium" };
+  if (type === "sudoku") {
+    return {
+      squares: 3,
+      difficulty: "medium",
+      difficultyOptions: "medium",
+    };
   }
-  if (type === "wordSearch" || type === "crossword") {
+  if (type === "maze") {
+    return {
+      rows: 15,
+      cols: 15,
+      difficulty: "medium",
+      difficultyOptions: "medium",
+    };
+  }
+  if (type === "wordSearch") {
+    return {
+      rows: 15,
+      cols: 15,
+      dictionaryName: "Custom",
+      words: "BOOK PAGE PUZZLE FUN WORD",
+      maxWords: 5,
+    };
+  }
+  if (type === "crossword") {
     return { gridSize: 10 };
   }
   if (type === "coloringPage") {

@@ -57,15 +57,90 @@ function parsePageUpdate(
   const parsedSettings: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(settings)) {
     if (
-      !["difficulty", "gridSize", "artStyle", "tone"].includes(key) ||
+      ![
+        "difficulty",
+        "difficultyOptions",
+        "squares",
+        "rows",
+        "cols",
+        "dictionaryName",
+        "words",
+        "maxWords",
+        "gridSize",
+        "artStyle",
+        "tone",
+      ].includes(key) ||
       (typeof value !== "string" &&
         typeof value !== "number" &&
         typeof value !== "boolean") ||
-      (typeof value === "number" && !Number.isFinite(value))
+      (typeof value === "number" && !Number.isFinite(value)) ||
+      (typeof value === "string" && value.length > 10000)
     ) {
       return { error: "Page settings are invalid." };
     }
-    parsedSettings[key] = value;
+    parsedSettings[key] =
+      typeof value === "string" && key === "words"
+        ? [...new Set(
+            value
+              .split(/\s+/)
+              .map((word) => word.replace(/[^a-z]/gi, "").toUpperCase())
+              .filter(Boolean),
+          )].join(" ")
+        : typeof value === "string" &&
+            (key === "dictionaryName" || key === "tone")
+          ? value.trim()
+          : value;
+  }
+
+  if (
+    parsedSettings.difficultyOptions !== undefined &&
+    (typeof parsedSettings.difficultyOptions !== "string" ||
+      parsedSettings.difficultyOptions.length > 32 ||
+      parsedSettings.difficultyOptions
+        .split(",")
+        .some((difficulty) => !isPuzzleDifficulty(difficulty)) ||
+      parsedSettings.difficultyOptions.length === 0)
+  ) {
+    return { error: "Page settings are invalid." };
+  }
+
+  if (
+    (type === "sudoku" &&
+      (!isIntegerInRange(parsedSettings.squares, 2, 5) ||
+        ![2, 3, 4, 5].includes(Number(parsedSettings.squares)) ||
+        !isPuzzleDifficulty(parsedSettings.difficulty))) ||
+    (type === "maze" &&
+      (!isIntegerInRange(parsedSettings.rows, 5, 40) ||
+        !isIntegerInRange(parsedSettings.cols, 5, 40) ||
+        !isPuzzleDifficulty(parsedSettings.difficulty))) ||
+    (type === "wordSearch" &&
+      (!isIntegerInRange(parsedSettings.rows, 5, 30) ||
+        !isIntegerInRange(parsedSettings.cols, 5, 30) ||
+        !isIntegerInRange(parsedSettings.maxWords, 1, 100) ||
+        typeof parsedSettings.dictionaryName !== "string" ||
+        !parsedSettings.dictionaryName ||
+        parsedSettings.dictionaryName.length > 100 ||
+        typeof parsedSettings.words !== "string" ||
+        parsedSettings.words.length === 0 ||
+        !parsedSettings.words
+          .split(" ")
+          .some(
+            (word) =>
+              word.length <=
+              Math.max(
+                Number(parsedSettings.rows),
+                Number(parsedSettings.cols),
+              ),
+          ))) ||
+    (type === "crossword" &&
+      ![8, 10, 12, 15].includes(Number(parsedSettings.gridSize))) ||
+    (type === "coloringPage" &&
+      !["line-art", "full-color"].includes(String(parsedSettings.artStyle))) ||
+    (type === "storyScene" &&
+      (typeof parsedSettings.tone !== "string" ||
+        parsedSettings.tone.length > 100))
+  ) {
+    return { error: "Page settings are invalid for this page type." };
   }
 
   return {
@@ -76,6 +151,25 @@ function parsePageUpdate(
       settings: parsedSettings,
     },
   };
+}
+
+function isIntegerInRange(
+  value: unknown,
+  min: number,
+  max: number,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= min &&
+    value <= max
+  );
+}
+
+function isPuzzleDifficulty(
+  value: unknown,
+): value is "easy" | "medium" | "hard" | "insane" {
+  return ["easy", "medium", "hard", "insane"].includes(String(value));
 }
 
 async function getAuthenticatedUserId() {

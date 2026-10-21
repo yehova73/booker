@@ -33,13 +33,17 @@ export function ContentSelectionStep({
   value,
   onChange,
   onBack,
+  onNext,
   onGenerate,
+  hasPuzzleSettings,
   isGenerating,
 }: {
   value: NewBookContentSelection;
   onChange: (updates: Partial<NewBookContentSelection>) => void;
   onBack: () => void;
+  onNext: () => void;
   onGenerate: () => void;
+  hasPuzzleSettings: boolean;
   isGenerating: boolean;
 }) {
   const storyModeActive = value.storyPuzzle && value.selectedPuzzles.length > 0;
@@ -129,9 +133,17 @@ export function ContentSelectionStep({
         <Button type="button" variant="outline" onClick={onBack} disabled={isGenerating}>
           ← Back
         </Button>
-        <Button type="button" onClick={onGenerate} disabled={isGenerating}>
-          <Sparkles />
-          {isGenerating ? "Creating Blueprint..." : "Generate Blueprint"}
+        <Button
+          type="button"
+          onClick={hasPuzzleSettings ? onNext : onGenerate}
+          disabled={isGenerating}
+        >
+          {hasPuzzleSettings ? "Next: Puzzle Settings" : <Sparkles />}
+          {hasPuzzleSettings
+            ? null
+            : isGenerating
+              ? "Creating Blueprint..."
+              : "Generate Blueprint"}
         </Button>
       </div>
     </div>

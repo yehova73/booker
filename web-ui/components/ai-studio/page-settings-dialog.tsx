@@ -141,8 +141,30 @@ export function PageSettingsDialog({
             </Select>
           </div>
 
-          {(type === "sudoku" || type === "maze") && (
+          {type === "sudoku" && (
             <div className="space-y-2">
+              <Label htmlFor="plan-page-sudoku-squares">Squares</Label>
+              <Select
+                value={
+                  typeof settings.squares === "number"
+                    ? String(settings.squares)
+                    : "3"
+                }
+                onValueChange={(value) => {
+                  if (value) updateSetting("squares", Number(value));
+                }}
+              >
+                <SelectTrigger id="plan-page-sudoku-squares" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2, 3, 4, 5].map((squares) => (
+                    <SelectItem key={squares} value={String(squares)}>
+                      {squares} ({squares * squares} × {squares * squares})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Label htmlFor="plan-page-difficulty">Difficulty</Label>
               <Select
                 value={
@@ -158,7 +180,7 @@ export function PageSettingsDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {["easy", "medium", "hard", "expert"].map((difficulty) => (
+                  {["easy", "medium", "hard", "insane"].map((difficulty) => (
                     <SelectItem key={difficulty} value={difficulty}>
                       {difficulty[0].toUpperCase() + difficulty.slice(1)}
                     </SelectItem>
@@ -168,7 +190,124 @@ export function PageSettingsDialog({
             </div>
           )}
 
-          {(type === "wordSearch" || type === "crossword") && (
+          {type === "maze" && (
+            <div className="grid grid-cols-2 gap-3">
+              <SettingsNumberInput
+                label="Rows"
+                setting="rows"
+                value={settings.rows}
+                defaultValue={15}
+                min={5}
+                max={40}
+                onChange={updateSetting}
+              />
+              <SettingsNumberInput
+                label="Cells per row"
+                setting="cols"
+                value={settings.cols}
+                defaultValue={15}
+                min={5}
+                max={40}
+                onChange={updateSetting}
+              />
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="plan-page-maze-difficulty">Difficulty</Label>
+                <Select
+                  value={
+                    typeof settings.difficulty === "string"
+                      ? settings.difficulty
+                      : "medium"
+                  }
+                  onValueChange={(value) => {
+                    if (value) updateSetting("difficulty", value);
+                  }}
+                >
+                  <SelectTrigger
+                    id="plan-page-maze-difficulty"
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["easy", "medium", "hard", "insane"].map((difficulty) => (
+                      <SelectItem key={difficulty} value={difficulty}>
+                        {difficulty[0].toUpperCase() + difficulty.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {type === "wordSearch" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <SettingsNumberInput
+                  label="Rows"
+                  setting="rows"
+                  value={settings.rows}
+                  defaultValue={15}
+                  min={5}
+                  max={30}
+                  onChange={updateSetting}
+                />
+                <SettingsNumberInput
+                  label="Columns"
+                  setting="cols"
+                  value={settings.cols}
+                  defaultValue={15}
+                  min={5}
+                  max={30}
+                  onChange={updateSetting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-page-wordsearch-dictionary">
+                  Dictionary name
+                </Label>
+                <Input
+                  id="plan-page-wordsearch-dictionary"
+                  maxLength={100}
+                  value={
+                    typeof settings.dictionaryName === "string"
+                      ? settings.dictionaryName
+                      : "Custom"
+                  }
+                  onChange={(event) =>
+                    updateSetting("dictionaryName", event.target.value)
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-page-wordsearch-words">
+                  Words (separate with spaces or new lines)
+                </Label>
+                <Textarea
+                  id="plan-page-wordsearch-words"
+                  rows={3}
+                  maxLength={10000}
+                  value={
+                    typeof settings.words === "string" ? settings.words : ""
+                  }
+                  onChange={(event) =>
+                    updateSetting("words", event.target.value)
+                  }
+                />
+              </div>
+              <SettingsNumberInput
+                label="Maximum words per puzzle"
+                setting="maxWords"
+                value={settings.maxWords}
+                defaultValue={12}
+                min={1}
+                max={100}
+                onChange={updateSetting}
+              />
+            </div>
+          )}
+
+          {type === "crossword" && (
             <div className="space-y-2">
               <Label htmlFor="plan-page-grid-size">Grid size</Label>
               <Select
@@ -290,5 +429,54 @@ export function PageSettingsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SettingsNumberInput({
+  label,
+  setting,
+  value,
+  defaultValue,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  setting: string;
+  value: string | number | boolean | undefined;
+  defaultValue: number;
+  min: number;
+  max: number;
+  onChange: (key: string, value: string | number) => void;
+}) {
+  const id = `plan-page-${setting}`;
+  const numberValue = typeof value === "number" ? value : defaultValue;
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min={min}
+        max={max}
+        value={numberValue}
+        aria-invalid={
+          !Number.isSafeInteger(numberValue) ||
+          numberValue < min ||
+          numberValue > max
+        }
+        onChange={(event) =>
+          onChange(
+            setting,
+            event.currentTarget.value === ""
+              ? 0
+              : Number(event.currentTarget.value),
+          )
+        }
+      />
+      <p className="text-xs text-muted-foreground">
+        Choose {min}–{max}.
+      </p>
+    </div>
   );
 }

@@ -9,7 +9,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   AI_BOOK_PLAN_PAGE_TYPES,
-  AI_STUDIO_PUZZLE_OPTIONS,
   getDefaultAiBookPageSettings,
   type AiBookPageSettings,
 } from "@/lib/ai-studio";
@@ -39,6 +38,13 @@ type GeneratedChunk = {
   pages: unknown[];
 };
 
+type ExistingPlanPage = {
+  id: string;
+  pageNumber: number;
+  type: AiBookPlanPageType;
+  settings: unknown;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -64,9 +70,10 @@ export async function generateAiBookBlueprintAction(
       pageCount: true,
       initialPrompt: true,
       storyPuzzle: true,
+      status: true,
       puzzles: { select: { type: true }, orderBy: { createdAt: "asc" } },
       pages: {
-        select: { id: true, pageNumber: true },
+        select: { id: true, pageNumber: true, type: true, settings: true },
         orderBy: { pageNumber: "asc" },
       },
     },
@@ -75,6 +82,25 @@ export async function generateAiBookBlueprintAction(
     return { status: "error", message: { title: "Book plan not found." } };
   }
   if (plan.pages.length !== plan.pageCount) {
+    return {
+      status: "error",
+      message: {
+        title: "This draft is missing page records.",
+        description: "Create a new draft before generating its blueprint.",
+      },
+    };
+  }
+  const planPages = plan.pages as ExistingPlanPage[];
+  const pageSettingsByNumber = new Map<number, ExistingPlanPage>(
+    planPages.map(
+      (page): [number, ExistingPlanPage] => [page.pageNumber, page],
+    ),
+  );
+  if (
+    Array.from({ length: plan.pageCount }, (_, index) => index + 1).some(
+      (pageNumber) => !pageSettingsByNumber.has(pageNumber),
+    )
+  ) {
     return {
       status: "error",
       message: {
@@ -97,13 +123,10 @@ export async function generateAiBookBlueprintAction(
 
   const expectedPages = Array.from({ length: plan.pageCount }, (_, index) => {
     const pageNumber = index + 1;
+    const configuredPage = pageSettingsByNumber.get(pageNumber);
     return {
       pageNumber,
-      allowedTypes: getAllowedTypes(
-        pageNumber,
-        plan.storyPuzzle,
-        plan.puzzles.map(({ type }) => type),
-      ),
+      allowedTypes: configuredPage ? [configuredPage.type] : [],
     };
   });
   const client = new OpenAI({ apiKey });
@@ -155,26 +178,86 @@ export async function generateAiBookBlueprintAction(
     };
   }
 
-  const pagesByNumber = new Map(
-    generatedPages.map((page) => [page.pageNumber, page]),
+  const settingsByType = new Map<AiBookPlanPageType, AiBookPageSettings[]>();
+  for (const page of planPages) {
+    const settings = parsePageSettings(page.settings);
+    const existing = settingsByType.get(page.type) ?? [];
+    existing.push(settings);
+    settingsByType.set(page.type, existing);
+  }
+  const generatedTypeIndexes = new Map<AiBookPlanPageType, number>();
+  const pagesWithSettings = generatedPages.map((page) => {
+    const index = generatedTypeIndexes.get(page.type) ?? 0;
+    generatedTypeIndexes.set(page.type, index + 1);
+    const previous = pageSettingsByNumber.get(page.pageNumber);
+    const templates = settingsByType.get(page.type) ?? [];
+    const settings =
+      previous?.type === page.type
+        ? parsePageSettings(previous.settings)
+        : templates[index % templates.length] ??
+          getDefaultAiBookPageSettings(page.type);
+    if (
+      (plan.status === "draft" || previous?.type !== page.type) &&
+      (page.type === "sudoku" || page.type === "maze")
+    ) {
+      const options =
+        typeof settings.difficultyOptions === "string"
+          ? settings.difficultyOptions
+              .split(",")
+              .filter((difficulty) =>
+                ["easy", "medium", "hard", "insane"].includes(difficulty),
+              )
+          : [];
+      if (options.length > 0) {
+        return {
+          ...page,
+          settings: {
+            ...settings,
+            difficulty: options[index % options.length] ?? "medium",
+          },
+        };
+      }
+    }
+    return { ...page, settings };
+  });
+  const pagesByNumber = new Map<number, GeneratedPage>(
+    pagesWithSettings.map(
+      (page): [number, GeneratedPage] => [page.pageNumber, page],
+    ),
   );
-  const orderedPages = expectedPages.map((expected) =>
-    pagesByNumber.get(expected.pageNumber),
-  );
-  if (orderedPages.some((page) => !page)) {
+  const orderedPages = expectedPages.flatMap((expected) => {
+    const page = pagesByNumber.get(expected.pageNumber);
+    return page ? [page] : [];
+  });
+  if (orderedPages.length !== expectedPages.length) {
     return {
       status: "error",
       message: { title: "The AI response was missing one or more pages." },
     };
   }
 
+  function parsePageSettings(value: unknown): AiBookPageSettings {
+    if (!isRecord(value)) return {};
+    const settings: AiBookPageSettings = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (
+        typeof entry === "string" ||
+        typeof entry === "number" ||
+        typeof entry === "boolean"
+      ) {
+        settings[key] = entry;
+      }
+    }
+    return settings;
+  }
+
   const blueprint: GeneratedBlueprint = {
     title: generatedTitle,
     kdpDescription,
-    pages: orderedPages as GeneratedPage[],
+    pages: orderedPages,
   };
-  const pageIds = new Map(
-    plan.pages.map((page) => [page.pageNumber, page.id]),
+  const pageIds = new Map<number, string>(
+    planPages.map((page): [number, string] => [page.pageNumber, page.id]),
   );
   await prisma.$transaction([
     prisma.aiBookPlan.update({
@@ -377,22 +460,6 @@ function parsePages(
     throw new Error("The AI response did not include every requested page.");
   }
   return [...pagesByNumber.values()];
-}
-
-function getAllowedTypes(
-  pageNumber: number,
-  storyPuzzle: boolean,
-  puzzles: string[],
-): AiBookPlanPageType[] {
-  if (pageNumber === 1) return ["titlePage"];
-  if (storyPuzzle && puzzles.length > 0 && pageNumber % 2 === 0) {
-    return ["storyScene"];
-  }
-  if (storyPuzzle && puzzles.length === 0) return ["storyScene"];
-  if (puzzles.length === 0) return ["activity"];
-  return AI_STUDIO_PUZZLE_OPTIONS.filter((option) =>
-    puzzles.includes(option.value),
-  ).map(({ value }) => value);
 }
 
 function chunkPages<T>(pages: T[], size: number): T[][] {
